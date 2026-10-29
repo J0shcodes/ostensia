@@ -1,0 +1,27 @@
+# Environment files: allow example templates only
+.env
+.env.*
+!.env.example
+!**/.env.example
+
+# Node / Next.js build artifacts
+node_modules/
+.next/
+dist/
+coverage/
+.turbo/
+
+# Local private spike copies and raw exports
+/private-spike/
+/raw-spike/
+/docs/evidence/spike/raw/
+
+# Postman environment exports may contain live values
+**/*postman*environment*.json
+!docs/evidence/spike/postman-environment.example.json
+
+# Logs and local IDE/OS files
+*.log
+.DS_Store
+Thumbs.db
+.vscode/

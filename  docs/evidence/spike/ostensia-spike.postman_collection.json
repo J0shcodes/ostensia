@@ -1,0 +1,1562 @@
+{
+  "info": {
+    "name": "Countersign Spike (PayPal sandbox)",
+    "description": "Technical spike for Countersign: vault > authorize > custom_id round-trip > capture/void > API-created dispute > evidence > adjudicate. Run folders in order. See SPIKE_README.md.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{merchant_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Fetches/refreshes OAuth tokens on demand so any single request can be run alone.",
+          "const b64 = (s) => CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(s));",
+          "function ensureToken(kind) {",
+          "  const own = pm.environment.get(kind + '_client_id') && pm.environment.get(kind + '_client_secret');",
+          "  const id = own ? pm.environment.get(kind + '_client_id') : pm.environment.get('merchant_client_id');",
+          "  const sec = own ? pm.environment.get(kind + '_client_secret') : pm.environment.get('merchant_client_secret');",
+          "  if (!id || !sec) { throw new Error('Set merchant_client_id and merchant_client_secret in the environment.'); }",
+          "  const tok = pm.environment.get(kind + '_token');",
+          "  const exp = Number(pm.environment.get(kind + '_token_exp') || 0);",
+          "  if (tok && Date.now() < exp - 60000) { return; }",
+          "  pm.sendRequest({",
+          "    url: pm.environment.get('base_url') + '/v1/oauth2/token',",
+          "    method: 'POST',",
+          "    header: { Authorization: 'Basic ' + b64(id + ':' + sec), 'Content-Type': 'application/x-www-form-urlencoded' },",
+          "    body: { mode: 'urlencoded', urlencoded: [{ key: 'grant_type', value: 'client_credentials' }] },",
+          "  }, function (err, res) {",
+          "    if (err || res.code !== 200) { throw new Error('Token request failed for ' + kind + ': ' + (err || res.code + ' ' + res.text())); }",
+          "    const j = res.json();",
+          "    pm.environment.set(kind + '_token', j.access_token);",
+          "    pm.environment.set(kind + '_token_exp', String(Date.now() + j.expires_in * 1000));",
+          "  });",
+          "}",
+          "const rn = pm.info.requestName || '';",
+          "if (rn.indexOf('00.') !== 0) {",
+          "  ensureToken('merchant');",
+          "  if (rn.indexOf('04.1') === 0) { ensureToken('buyer'); }",
+          "}",
+          "if (!pm.environment.get('dispute_id') && pm.environment.get('dispute_id_manual')) { pm.environment.set('dispute_id', pm.environment.get('dispute_id_manual')); }",
+          "const needsDispute = rn.indexOf('04.') === 0 && rn.indexOf('04.1') !== 0 || rn.indexOf('05.') === 0;",
+          "if (needsDispute && !pm.environment.get('dispute_id')) {",
+          "  console.warn('SKIPPED ' + rn + ': no dispute_id (04.1 failed or was not run).');",
+          "  pm.execution.skipRequest();",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "if (pm.response.code >= 400 && pm.info.requestName.indexOf('04.1') !== 0) {",
+          "  console.error('HTTP ' + pm.response.code + ' on ' + pm.info.requestName + ': ' + pm.response.text().slice(0, 900));",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "00 Auth",
+      "description": "Proves both sets of credentials work. Run first.",
+      "item": [
+        {
+          "name": "00.1 Merchant access token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "pm.test('access_token present', () => pm.expect(j.access_token).to.be.a('string'));",
+                  "pm.environment.set('merchant_token', j.access_token);",
+                  "pm.environment.set('merchant_token_exp', String(Date.now() + j.expires_in * 1000));",
+                  "console.log('Token scope:', j.scope);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/oauth2/token",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "oauth2",
+                "token"
+              ]
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "client_credentials"
+                }
+              ]
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{merchant_client_id}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{merchant_client_secret}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "00.2 Buyer-side access token (falls back to merchant app)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const own = pm.environment.get('buyer_client_id') && pm.environment.get('buyer_client_secret');",
+                  "const id = own ? pm.environment.get('buyer_client_id') : pm.environment.get('merchant_client_id');",
+                  "const sec = own ? pm.environment.get('buyer_client_secret') : pm.environment.get('merchant_client_secret');",
+                  "pm.request.headers.upsert({ key: 'Authorization', value: 'Basic ' + CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(id + ':' + sec)) });",
+                  "console.log('Buyer-side token uses the ' + (own ? 'buyer' : 'merchant') + ' app credentials');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "pm.environment.set('buyer_token', j.access_token);",
+                  "pm.environment.set('buyer_token_exp', String(Date.now() + j.expires_in * 1000));",
+                  "if (pm.response.code === 200 && !String(j.scope || '').includes('disputes/create')) {",
+                  "  console.warn('WARNING: disputes/create scope not listed on this app. Dispute creation (04.1) may fail until the scope is enabled.');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/oauth2/token",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "oauth2",
+                "token"
+              ]
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "client_credentials"
+                }
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "01a Vault setup (before manual approval)",
+      "description": "Creates a PayPal vault setup token. You must then open approve_url in a browser and approve as the sandbox buyer (MANUAL STEP).",
+      "item": [
+        {
+          "name": "01a.1 Create setup token (save PayPal without purchase)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200/201 created', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));",
+                  "const j = pm.response.json();",
+                  "pm.environment.set('setup_token_id', j.id);",
+                  "const link = (j.links || []).find(l => l.rel === 'approve');",
+                  "pm.test('approve link returned', () => pm.expect(link, 'no approve link; is vaulting enabled on the app?').to.exist);",
+                  "if (link) {",
+                  "  pm.environment.set('approve_url', link.href);",
+                  "  console.log('>>> MANUAL STEP: open this URL, log in as the sandbox buyer, approve:');",
+                  "  console.log(link.href);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "PayPal-Request-Id",
+                "value": "{{$guid}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v3/vault/setup-tokens",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v3",
+                "vault",
+                "setup-tokens"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"payment_source\": {\n    \"paypal\": {\n      \"usage_type\": \"MERCHANT\",\n      \"customer_type\": \"CONSUMER\",\n      \"experience_context\": {\n        \"return_url\": \"{{return_url}}\",\n        \"cancel_url\": \"{{cancel_url}}\"\n      }\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "01b Vault finalize (after manual approval)",
+      "description": "Run only after you approved the setup token in the browser.",
+      "item": [
+        {
+          "name": "01b.1 Check setup token is APPROVED",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "console.log('setup token status:', j.status);",
+                  "pm.test('Setup token APPROVED (did you approve approve_url?)', () => pm.expect(j.status).to.eql('APPROVED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v3/vault/setup-tokens/{{setup_token_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v3",
+                "vault",
+                "setup-tokens",
+                "{{setup_token_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "01b.2 Create payment token (vault_id)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200/201 created', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));",
+                  "const j = pm.response.json();",
+                  "pm.test('vault id returned', () => pm.expect(j.id).to.be.a('string'));",
+                  "pm.environment.set('vault_id', j.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "PayPal-Request-Id",
+                "value": "{{$guid}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v3/vault/payment-tokens",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v3",
+                "vault",
+                "payment-tokens"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"payment_source\": {\n    \"token\": {\n      \"id\": \"{{setup_token_id}}\",\n      \"type\": \"SETUP_TOKEN\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "01b.3 Read vault token (captures buyer payer_id)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "const pp = (j.payment_source || {}).paypal || {};",
+                  "console.log('vaulted buyer email:', pp.email_address, '| payer_id:', pp.payer_id);",
+                  "if (pp.payer_id) { pm.environment.set('buyer_payer_id', pp.payer_id); }",
+                  "if (pp.email_address) { pm.environment.set('vaulted_email', pp.email_address); }",
+                  "const be = String(pm.environment.get('buyer_email') || '').toLowerCase();",
+                  "if (!be) { console.warn('buyer_email is not set. The vaulted email will be used for the dispute assertion.'); }",
+                  "pm.test('vaulted email matches buyer_email (skipped if buyer_email unset)', () => { if (be) { pm.expect(String(pp.email_address || '').toLowerCase()).to.eql(be); } });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v3/vault/payment-tokens/{{vault_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v3",
+                "vault",
+                "payment-tokens",
+                "{{vault_id}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Bind intent to payment (vault > authorize > capture)",
+      "description": "Core of Countersign: mandate hash in custom_id, authorize then capture, tracking.",
+      "item": [
+        {
+          "name": "02.1 Create order AUTHORIZE with vault_id + custom_id",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('mandate_hash', CryptoJS.SHA256(pm.environment.get('mandate_json')).toString());",
+                  "pm.environment.set('authorization_id', '');",
+                  "pm.environment.set('capture_id', '');",
+                  "pm.environment.set('buyer_transaction_id', '');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200/201 created', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));",
+                  "const j = pm.response.json();",
+                  "pm.environment.set('order_id', j.id);",
+                  "console.log('order status:', j.status);",
+                  "pm.test('Order is APPROVED or already authorized (vault payment accepted without buyer redirect)', () => pm.expect(j.status).to.be.oneOf(['APPROVED', 'COMPLETED']));",
+                  "const pu = (j.purchase_units || [])[0] || {};",
+                  "const auths = (pu.payments || {}).authorizations || [];",
+                  "if (auths.length) { pm.environment.set('authorization_id', auths[0].id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "PayPal-Request-Id",
+                "value": "{{$guid}}"
+              },
+              {
+                "key": "Prefer",
+                "value": "return=representation"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v2/checkout/orders",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v2",
+                "checkout",
+                "orders"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"intent\": \"AUTHORIZE\",\n  \"payment_source\": {\n    \"paypal\": {\n      \"vault_id\": \"{{vault_id}}\"\n    }\n  },\n  \"purchase_units\": [\n    {\n      \"reference_id\": \"countersign-spike\",\n      \"custom_id\": \"{{mandate_hash}}\",\n      \"invoice_id\": \"CS-{{$timestamp}}\",\n      \"description\": \"Countersign spike: rain jacket\",\n      \"amount\": {\n        \"currency_code\": \"{{currency}}\",\n        \"value\": \"{{order_amount}}\"\n      }\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "02.2 Authorize order (422 ORDER_ALREADY_AUTHORIZED is fine)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = pm.response.code;",
+                  "const j = pm.response.json();",
+                  "if (code === 201 || code === 200) {",
+                  "  const a = (((j.purchase_units || [])[0] || {}).payments || {}).authorizations || [];",
+                  "  pm.test('Authorization created', () => pm.expect(a.length).to.be.above(0));",
+                  "  if (a.length) { pm.environment.set('authorization_id', a[0].id); console.log('authorization:', a[0].id, a[0].status); }",
+                  "} else {",
+                  "  pm.test('Already authorized is acceptable', () => {",
+                  "    pm.expect(code).to.eql(422);",
+                  "    pm.expect(JSON.stringify(j)).to.include('ORDER_ALREADY_AUTHORIZED');",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "PayPal-Request-Id",
+                "value": "{{$guid}}"
+              },
+              {
+                "key": "Prefer",
+                "value": "return=representation"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v2/checkout/orders/{{order_id}}/authorize",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v2",
+                "checkout",
+                "orders",
+                "{{order_id}}",
+                "authorize"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "02.3 Read back order: custom_id must equal mandate hash",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "const pu = (j.purchase_units || [])[0] || {};",
+                  "pm.test('custom_id round-trips the mandate hash', () => pm.expect(pu.custom_id).to.eql(pm.environment.get('mandate_hash')));",
+                  "const a = (pu.payments || {}).authorizations || [];",
+                  "pm.test('authorization present on order', () => pm.expect(a.length).to.be.above(0));",
+                  "if (a.length) { pm.environment.set('authorization_id', a[0].id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v2/checkout/orders/{{order_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v2",
+                "checkout",
+                "orders",
+                "{{order_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "02.4 Capture authorization",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 created', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));",
+                  "const j = pm.response.json();",
+                  "pm.test('capture COMPLETED or PENDING', () => pm.expect(j.status).to.be.oneOf(['COMPLETED', 'PENDING']));",
+                  "pm.environment.set('capture_id', j.id);",
+                  "if (!pm.environment.get('buyer_transaction_id')) { pm.environment.set('buyer_transaction_id', j.id); }",
+                  "console.log('capture:', j.id, j.status);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "PayPal-Request-Id",
+                "value": "{{$guid}}"
+              },
+              {
+                "key": "Prefer",
+                "value": "return=representation"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v2/payments/authorizations/{{authorization_id}}/capture",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v2",
+                "payments",
+                "authorizations",
+                "{{authorization_id}}",
+                "capture"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"final_capture\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "02.5 Add shipment tracking (future PROOF_OF_FULFILLMENT)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('tracking accepted (200/201)', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v2/checkout/orders/{{order_id}}/track",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v2",
+                "checkout",
+                "orders",
+                "{{order_id}}",
+                "track"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"capture_id\": \"{{capture_id}}\",\n  \"tracking_number\": \"{{tracking_number}}\",\n  \"carrier\": \"{{carrier}}\",\n  \"notify_payer\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Cooling-off path (authorize > void)",
+      "description": "Proves the void path: money never moves when conformance fails.",
+      "item": [
+        {
+          "name": "03.1 Create order AUTHORIZE (void path)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('mandate_hash', CryptoJS.SHA256(pm.environment.get('mandate_json')).toString());",
+                  "pm.environment.set('auth_id_void', '');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200/201 created', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));",
+                  "const j = pm.response.json();",
+                  "pm.environment.set('order_id_void', j.id);",
+                  "pm.test('Order APPROVED or already authorized', () => pm.expect(j.status).to.be.oneOf(['APPROVED', 'COMPLETED']));",
+                  "const a = ((((j.purchase_units || [])[0] || {}).payments) || {}).authorizations || [];",
+                  "if (a.length) { pm.environment.set('auth_id_void', a[0].id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "PayPal-Request-Id",
+                "value": "{{$guid}}"
+              },
+              {
+                "key": "Prefer",
+                "value": "return=representation"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v2/checkout/orders",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v2",
+                "checkout",
+                "orders"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"intent\": \"AUTHORIZE\",\n  \"payment_source\": {\n    \"paypal\": {\n      \"vault_id\": \"{{vault_id}}\"\n    }\n  },\n  \"purchase_units\": [\n    {\n      \"reference_id\": \"countersign-spike\",\n      \"custom_id\": \"{{mandate_hash}}\",\n      \"invoice_id\": \"CS-{{$timestamp}}\",\n      \"description\": \"Countersign spike: rain jacket\",\n      \"amount\": {\n        \"currency_code\": \"{{currency}}\",\n        \"value\": \"{{order_amount}}\"\n      }\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "03.2 Authorize order (void path)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = pm.response.code;",
+                  "const j = pm.response.json();",
+                  "if (code === 200 || code === 201) {",
+                  "  const a = (((j.purchase_units || [])[0] || {}).payments || {}).authorizations || [];",
+                  "  pm.test('Authorization created', () => pm.expect(a.length).to.be.above(0));",
+                  "  if (a.length) { pm.environment.set('auth_id_void', a[0].id); }",
+                  "} else {",
+                  "  pm.test('Already authorized is acceptable', () => { pm.expect(code).to.eql(422); pm.expect(JSON.stringify(j)).to.include('ORDER_ALREADY_AUTHORIZED'); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "PayPal-Request-Id",
+                "value": "{{$guid}}"
+              },
+              {
+                "key": "Prefer",
+                "value": "return=representation"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v2/checkout/orders/{{order_id_void}}/authorize",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v2",
+                "checkout",
+                "orders",
+                "{{order_id_void}}",
+                "authorize"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "03.3 Void authorization",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('void accepted (200/204)', () => pm.expect(pm.response.code).to.be.oneOf([200, 204]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "PayPal-Request-Id",
+                "value": "{{$guid}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v2/payments/authorizations/{{auth_id_void}}/void",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v2",
+                "payments",
+                "authorizations",
+                "{{auth_id_void}}",
+                "void"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "03.4 Confirm authorization is VOIDED",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('status VOIDED', () => pm.expect(pm.response.json().status).to.eql('VOIDED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v2/payments/authorizations/{{auth_id_void}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v2",
+                "payments",
+                "authorizations",
+                "{{auth_id_void}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Disputes harness (create > evidence > adjudicate)",
+      "description": "Needs a captured order from folder 02 and one-time buyer consent. 04.1 uses the buyer token + PayPal-Auth-Assertion.",
+      "item": [
+        {
+          "name": "04.1 Create dispute as buyer (sandbox-only)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const b64u = (s) => CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(s)).replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "const cid = (pm.environment.get('buyer_client_id') && pm.environment.get('buyer_client_secret')) ? pm.environment.get('buyer_client_id') : pm.environment.get('merchant_client_id');",
+                  "const usePayer = pm.environment.get('assertion_subject') === 'payer_id' && pm.environment.get('buyer_payer_id');",
+                  "const buyerEmail = pm.environment.get('buyer_email') || pm.environment.get('vaulted_email');",
+                  "if (!usePayer && !buyerEmail) { throw new Error('buyer_email is empty. Set BUYER_EMAIL (sandbox buyer email) or run --request 01b.3 first.'); }",
+                  "const subject = usePayer ? { iss: cid, payer_id: pm.environment.get('buyer_payer_id') } : { iss: cid, email: buyerEmail };",
+                  "const jwt = b64u(JSON.stringify({ alg: 'none', typ: 'JWT' })) + '.' + b64u(JSON.stringify(subject)) + '.';",
+                  "const manualDispute = pm.environment.get('dispute_id_manual');",
+                  "pm.environment.set('dispute_id', '');",
+                  "console.log('Auth-assertion subject:', usePayer ? 'payer_id' : 'email', '| iss (client id) ends with ...' + String(cid).slice(-6));",
+                  "pm.environment.set('auth_assertion', jwt);",
+                  "if (!pm.environment.get('buyer_transaction_id')) { pm.environment.set('buyer_transaction_id', pm.environment.get('capture_id')); }",
+                  "if (manualDispute) {",
+                  "  pm.environment.set('dispute_id', manualDispute);",
+                  "  console.log('Using manually created dispute ' + manualDispute + ' (04.1 skipped)');",
+                  "  pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code !== 201) {",
+                  "  console.error('04.1 FAILED ' + pm.response.code + '. PayPal said: ' + pm.response.text());",
+                  "  console.error('Sent buyer_transaction_id: ' + pm.environment.get('buyer_transaction_id') + ' | debug id: ' + pm.response.headers.get('paypal-debug-id'));",
+                  "}",
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* non-JSON body */ }",
+                  "const self = (j.links || []).find(l => l.rel === 'self');",
+                  "pm.test('dispute link returned', () => pm.expect(self).to.exist);",
+                  "if (self) {",
+                  "  const id = self.href.split('/').pop();",
+                  "  pm.environment.set('dispute_id', id);",
+                  "  console.log('dispute_id:', id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "PayPal-Auth-Assertion",
+                "value": "{{auth_assertion}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/customer/disputes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "customer",
+                "disputes"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "input",
+                  "value": "{\"disputed_transactions\":[{\"buyer_transaction_id\":\"{{buyer_transaction_id}}\"}],\"reason\":\"MERCHANDISE_OR_SERVICE_NOT_RECEIVED\",\"dispute_amount\":{\"currency_code\":\"{{currency}}\",\"value\":\"{{dispute_amount}}\"},\"extensions\":{\"merchant_contacted\":true,\"merchant_contacted_outcome\":\"NO_RESPONSE\",\"merchandize_dispute_properties\":{\"issue_type\":\"PRODUCT\"}}}",
+                  "contentType": "application/json",
+                  "type": "text"
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{buyer_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "04.2 Show dispute (merchant view)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "console.log('status:', j.status, '| stage:', j.dispute_life_cycle_stage, '| due:', j.seller_response_due_date);",
+                  "console.log('allowed actions:', (j.links || []).map(l => l.rel).join(', '));",
+                  "pm.test('dispute has status and stage', () => { pm.expect(j.status).to.be.a('string'); pm.expect(j.dispute_life_cycle_stage).to.be.a('string'); });",
+                  "pm.environment.set('dispute_status', j.status);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/customer/disputes/{{dispute_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "customer",
+                "disputes",
+                "{{dispute_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "04.3 Require seller evidence (sandbox-only)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK, or already waiting for seller (4xx logged)', () => pm.expect(pm.response.code).to.be.oneOf([200, 400, 422]));",
+                  "if (pm.response.code !== 200) { console.warn('require-evidence not applied:', pm.response.text()); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/customer/disputes/{{dispute_id}}/require-evidence",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "customer",
+                "disputes",
+                "{{dispute_id}}",
+                "require-evidence"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"SELLER_EVIDENCE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "04.4 Provide evidence (PROOF_OF_FULFILLMENT)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('evidence accepted (200)', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/customer/disputes/{{dispute_id}}/provide-evidence",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "customer",
+                "disputes",
+                "{{dispute_id}}",
+                "provide-evidence"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "input",
+                  "value": "{\"evidences\":[{\"evidence_type\":\"PROOF_OF_FULFILLMENT\",\"evidence_info\":{\"tracking_info\":[{\"carrier_name\":\"{{carrier}}\",\"tracking_number\":\"{{tracking_number}}\"}]},\"notes\":\"Countersign spike: signed mandate hash {{mandate_hash}}\"}]}",
+                  "contentType": "application/json",
+                  "type": "text"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "04.5 Show dispute (expect UNDER_REVIEW + adjudicate link)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "const rels = (j.links || []).map(l => l.rel);",
+                  "console.log('status:', j.status, '| links:', rels.join(', '));",
+                  "pm.test('adjudicate link available (sandbox settle possible)', () => pm.expect(rels).to.include('adjudicate'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/customer/disputes/{{dispute_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "customer",
+                "disputes",
+                "{{dispute_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "04.6 Adjudicate in seller favor (sandbox-only)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/customer/disputes/{{dispute_id}}/adjudicate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "customer",
+                "disputes",
+                "{{dispute_id}}",
+                "adjudicate"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"adjudication_outcome\": \"SELLER_FAVOR\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "04.7 Show dispute (expect RESOLVED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "console.log('final status:', j.status, '| outcome:', JSON.stringify(j.dispute_outcome));",
+                  "pm.test('dispute RESOLVED', () => pm.expect(j.status).to.eql('RESOLVED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/customer/disputes/{{dispute_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "customer",
+                "disputes",
+                "{{dispute_id}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Resolver write actions (optional, run on a FRESH dispute)",
+      "description": "Alternate paths. Re-run 02 then 04.1 and 04.2 for a fresh dispute, then use these instead of 04.3 to 04.6.",
+      "item": [
+        {
+          "name": "05.1 Send message to buyer (inquiry stage)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('message accepted (200)', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/customer/disputes/{{dispute_id}}/send-message",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "customer",
+                "disputes",
+                "{{dispute_id}}",
+                "send-message"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "input",
+                  "value": "{\"message\":\"Countersign: your signed mandate specified this item and delivery date.\"}",
+                  "contentType": "application/json",
+                  "type": "text"
+                }
+              ]
+            },
+            "description": "If this returns 415, switch the body to raw JSON {\"message\": \"...\"}."
+          }
+        },
+        {
+          "name": "05.2 Make partial-refund offer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('offer accepted (200)', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/customer/disputes/{{dispute_id}}/make-offer",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "customer",
+                "disputes",
+                "{{dispute_id}}",
+                "make-offer"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"note\": \"Partial refund offered under the signed mandate.\",\n  \"offer_amount\": {\n    \"currency_code\": \"{{currency}}\",\n    \"value\": \"5.00\"\n  },\n  \"offer_type\": \"REFUND\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "05.3 Accept claim (full refund path)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('claim accepted (200)', () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "console.log('links:', (j.links || []).map(l => l.rel).join(', '));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/customer/disputes/{{dispute_id}}/accept-claim",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "customer",
+                "disputes",
+                "{{dispute_id}}",
+                "accept-claim"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"note\": \"Mandate violated: refunding buyer.\",\n  \"accept_claim_type\": \"REFUND\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "05.4 Escalate inquiry to claim (merchant)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('escalate accepted (200)', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/customer/disputes/{{dispute_id}}/escalate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "customer",
+                "disputes",
+                "{{dispute_id}}",
+                "escalate"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"note\": \"Countersign spike: escalating inquiry to a claim to test claim-stage evidence.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Moves an INQUIRY to the claim (CHARGEBACK) stage so seller evidence actions become available. Rejected if PayPal does not offer the escalate action on this dispute."
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Webhooks (optional)",
+      "description": "Needs webhook_url (e.g. a webhook.site URL) in the environment.",
+      "item": [
+        {
+          "name": "06.1 Simulate CUSTOMER.DISPUTE.CREATED",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('simulate accepted (202)', () => pm.expect(pm.response.code).to.be.oneOf([200, 202]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/notifications/simulate-event",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "notifications",
+                "simulate-event"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"{{webhook_url}}\",\n  \"event_type\": \"CUSTOMER.DISPUTE.CREATED\",\n  \"resource_version\": \"2.0\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "F Human-present fallback (no vault)",
+      "description": "Use if vaulting is blocked: order needs buyer approval in the browser, then continue from 02.2.",
+      "item": [
+        {
+          "name": "F.1 Create order AUTHORIZE (buyer approves in browser)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('mandate_hash', CryptoJS.SHA256(pm.environment.get('mandate_json')).toString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200/201 created', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));",
+                  "const j = pm.response.json();",
+                  "pm.environment.set('order_id', j.id);",
+                  "const link = (j.links || []).find(l => l.rel === 'payer-action' || l.rel === 'approve');",
+                  "if (link) {",
+                  "  pm.environment.set('approve_url', link.href);",
+                  "  console.log('>>> MANUAL STEP: open, log in as sandbox buyer, approve, then run 02.2 onward:');",
+                  "  console.log(link.href);",
+                  "}",
+                  "pm.test('buyer approval link returned', () => pm.expect(link).to.exist);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "PayPal-Request-Id",
+                "value": "{{$guid}}"
+              },
+              {
+                "key": "Prefer",
+                "value": "return=representation"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v2/checkout/orders",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v2",
+                "checkout",
+                "orders"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"intent\": \"AUTHORIZE\",\n  \"payment_source\": {\n    \"paypal\": {\n      \"experience_context\": {\n        \"return_url\": \"{{return_url}}\",\n        \"cancel_url\": \"{{cancel_url}}\",\n        \"user_action\": \"PAY_NOW\"\n      }\n    }\n  },\n  \"purchase_units\": [\n    {\n      \"reference_id\": \"countersign-spike\",\n      \"custom_id\": \"{{mandate_hash}}\",\n      \"invoice_id\": \"CS-{{$timestamp}}\",\n      \"amount\": {\n        \"currency_code\": \"{{currency}}\",\n        \"value\": \"{{order_amount}}\"\n      }\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "F.2 Check order APPROVED",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('order APPROVED', () => pm.expect(pm.response.json().status).to.eql('APPROVED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v2/checkout/orders/{{order_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v2",
+                "checkout",
+                "orders",
+                "{{order_id}}"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
