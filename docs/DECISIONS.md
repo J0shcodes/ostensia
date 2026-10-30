@@ -1,8 +1,9 @@
 # Ostensia Decision Log
 
 Entries D-001 to D-005 are the repository bootstrap decisions, made on
-2026-10-29 before any application code existed. Use the template at the
-end of this file for later entries.
+2026-10-29 before any application code existed. Entries D-006 to D-013
+record the MVP architecture approved on 2026-10-30. Use the template at
+the end of this file for later entries.
 
 ## Decision D-001 — Remove the leading space from top-level directory names
 
@@ -52,14 +53,14 @@ commit's tree still contains the spaced names.
 git status lists all 11 tracked files as renames with 0 insertions and
 0 deletions. git ls-files shows no leading spaces. git check-ignore
 confirms the Postman environment file is still ignored at its new path.
-The rename was staged, not committed, at the time of writing.
+The rename was committed in 5d426d5 after the developer authorized it.
 
 ### Revisit trigger
 None expected.
 
 ### Follow-up
-Commit after the developer authorizes it. The "Countersign" naming left
-in the spike artifacts is a separate cleanup (see D-003).
+Done (5d426d5). The "Countersign" naming left in the spike artifacts is a
+separate cleanup (see D-003).
 
 ## Decision D-002 — pnpm workspaces and monorepo layout
 
@@ -297,6 +298,407 @@ The workspace link or Fastify setup takes much longer than planned.
 ### Follow-up
 Propose Increment 1 in detail: exact files, pinned dependency versions,
 scripts and tests. Stop for approval before implementing.
+
+## Decision D-006 — MVP architecture: one API process, pure domain, isolated PayPal adapter
+
+Date: 2026-10-30
+Status: Accepted
+Related increment: Increments 1–8
+Related findings: docs/research-summary.md section 5; architecture plan review
+Related risks: Policy logic leaking into I/O code; secrets reaching the browser
+
+### Context
+The MVP needs a frontend, an API, policy evaluation, PayPal calls, AI
+drafting and an audit record. The historical report proposed separate
+Gate, Resolver and Harness services, plus AG Studio and PostgreSQL.
+
+### Options considered
+1. A single Fastify process holding all secrets. A pure domain package for
+   schemas, evaluation and payment-action rules. A PayPal adapter module.
+   Next.js as a thin client that reaches Fastify through a rewrite.
+   - Benefits: deterministic rules can be tested without I/O; secrets stay
+     in one process; no CORS setup is needed.
+   - Costs/risks: two processes to run locally.
+2. Next.js route handlers only.
+   - Benefits: one process.
+   - Costs/risks: payment secrets and policy code live inside the web app,
+     against the agreed stack.
+3. Separate services, as in the historical design.
+   - Benefits: matches the original report.
+   - Costs/risks: deployment and coordination cost with no MVP need.
+
+### Decision
+Option 1.
+- Gate becomes the domain evaluator plus a gate module in the API.
+- Resolver is deferred. At most it becomes a labelled simulated view
+  built from the audit record.
+- Harness becomes the test strategy (D-011).
+- AG Studio is dropped for the MVP.
+- PostgreSQL is deferred (D-008).
+
+### Rationale
+This is the smallest structure that keeps enforcement deterministic,
+server-side and testable.
+
+### Trade-offs
+- Locks and state are valid only within one process.
+- The developer runs both the web app and the API.
+
+### Verification
+Increment 1 must show that the API imports the domain package. Increment 2
+must show that the domain has no I/O imports.
+
+### Revisit trigger
+Multi-instance hosting, or a proven need for a separate dispute service.
+
+### Follow-up
+None.
+
+## Decision D-007 — Gate ordering: pre-check, vault order, final evaluation, capture or void
+
+Date: 2026-10-30
+Status: Accepted
+Related increment: Increments 2, 5
+Related findings: Spike collection 02.1–02.4 and 03.1–03.4; docs/spike-findings.md section 2
+Related risks: Funds held for non-compliant purchases; void not demonstrable
+
+### Context
+An order created with a previously approved vault_id came back already
+authorized: a later authorize call returned 422 ORDER_ALREADY_AUTHORIZED.
+The only way to avoid holding funds is to check the purchase before the
+order is created.
+
+### Options considered
+1. Authorize first, then evaluate, then capture or void.
+   - Benefits: a void happens on every block.
+   - Costs/risks: funds are held even for obviously non-compliant purchases.
+2. Evaluate first and authorize only compliant purchases.
+   - Benefits: nothing is held.
+   - Costs/risks: void never happens, and amounts PayPal reports are never
+     checked.
+3. Pre-check, then create the vault order, then run a final evaluation
+   that includes PayPal-observed facts, then capture or void.
+   - Benefits: no hold for an obvious violation. A void still covers
+     violations that appear after authorization: mandate revoked or
+     expired, or a mismatch in observed amount, currency or custom_id.
+   - Costs/risks: two evaluation points to test and explain.
+
+### Decision
+Option 3. Capture happens only when the final decision is "allow" and the
+observed authorization status is CREATED. Void happens only when the final
+decision is "block" and the status is CREATED. Every other combination
+performs no PayPal write.
+
+### Rationale
+The flow follows the payment lifecycle the spike evidenced, rather than
+forcing a void into every block.
+
+### Trade-offs
+The demo shows a void through a labelled "revoke before settlement"
+scenario. If a void is not permitted, the attempt ends blocked and
+uncaptured, and the authorization lapses at expiry.
+
+### Verification
+Increment 2: exhaustive tests of the payment-action table. Increment 5:
+fake-PayPal tests confirm zero PayPal calls on a pre-check block and zero
+captures on any failure. Increment 7: a manual sandbox end-to-end run.
+
+### Revisit trigger
+E-1 shows that the vault order no longer authorizes without the buyer.
+
+### Follow-up
+None.
+
+## Decision D-008 — Persistence: in memory plus an append-only JSONL audit log
+
+Date: 2026-10-30
+Status: Accepted
+Related increment: Increment 5
+Related findings: Architecture plan review
+Related risks: Audit loss; concurrency across processes
+
+### Context
+The MVP needs immutable confirmed mandates, purchase-attempt state and an
+audit trail that survives restarts. The historical report proposed
+PostgreSQL.
+
+### Options considered
+1. In memory only.
+   - Benefits: nothing to set up.
+   - Costs/risks: the audit is lost on restart.
+2. In memory plus an append-only JSONL file replayed at startup.
+   - Benefits: no new dependency; the audit is human-readable and survives
+     restarts.
+   - Costs/risks: single process only; replay code must be written by hand.
+3. SQLite through node:sqlite.
+   - Benefits: transactions.
+   - Costs/risks: its stability in Node 24 is not yet verified.
+4. PostgreSQL with an ORM.
+   - Benefits: multi-user and concurrent.
+   - Costs/risks: a server, migrations and hosting for a single-user demo.
+
+### Decision
+Option 2. The JSONL file lives in a gitignored data/ directory.
+
+### Rationale
+One process and one user, with no cross-instance locking. PostgreSQL is not
+justified now.
+
+### Trade-offs
+Not suitable for multi-instance hosting. A corrupt final line is skipped
+with a warning.
+
+### Verification
+Increment 5: the audit survives a restart.
+
+### Revisit trigger
+Multi-user hosting, more than one API instance, or real customers.
+
+### Follow-up
+None.
+
+## Decision D-009 — Mandate model, and the hash as binding rather than enforcement
+
+Date: 2026-10-30
+Status: Accepted
+Related increment: Increment 2
+Related findings: docs/spike-findings.md section 2 (custom_id round-trip)
+Related risks: Treating the hash as enforcement; AI-invented limits
+
+### Context
+The AI proposes mandates, and the user confirms them. PayPal stores
+custom_id and echoes it back, but it does not interpret it.
+
+### Options considered
+1. Zod schemas: a lenient Draft that may hold null fields, and a strict
+   confirmed Mandate.
+   - Benefits: one source for types and validation; "AI-proposed" and
+     "user-confirmed" stay distinct.
+   - Costs/risks: one runtime dependency, approved separately in
+     Increment 2.
+2. Hand-written validators.
+   - Benefits: no dependency.
+   - Costs/risks: types and checks are duplicated.
+3. JSON Schema with Ajv.
+   - Benefits: a natural fit for AI structured output.
+   - Costs/risks: types drift away from the schema.
+
+### Decision
+Option 1, subject to approval of the Zod dependency in Increment 2.
+- Confirmed mandates are immutable. An edit creates a new mandate.
+- Money is held as integer minor units, USD only.
+- The SHA-256 hash of the mandate's canonical JSON goes in custom_id.
+- The hash binds a payment to a mandate. It does not enforce the mandate.
+
+### Rationale
+Only deterministic evaluation decides compliance. The hash lets anyone
+check later which mandate a payment claimed to follow.
+
+### Trade-offs
+A schema that is too strict may reject real intents.
+
+### Verification
+Increment 2 tests for canonical-hash stability (key order, Unicode) and
+for every rule.
+
+### Revisit trigger
+A need for multiple currencies or for mandate signatures.
+
+### Follow-up
+None.
+
+## Decision D-010 — PayPal lifecycle and request contract
+
+Date: 2026-10-30
+Status: Accepted
+Related increment: Increments 3, 4
+Related findings: Spike collection 02.x and 03.x; PayPal Orders v2 and Payments v2 documentation reviewed 2026-10-30
+Related risks: Duplicate capture; unverified request shapes; misreading payment state
+
+### Context
+The spike created orders with intent AUTHORIZE and
+payment_source.paypal.vault_id, with custom_id set to the mandate hash.
+- An authorization existed afterwards: step 02.3 found it on the order,
+  and the authorize call returned 422 ORDER_ALREADY_AUTHORIZED.
+- Capture and void each succeeded, on different authorizations.
+- PayPal documentation also recommends stored_credential for payments the
+  merchant initiates. The spike did not send it.
+
+### Options considered
+1. A custom adapter over fetch that reproduces the spike's exact request
+   body.
+   - Benefits: matches the evidence; full control of headers.
+   - Costs/risks: about 200 lines of our own code.
+2. PayPal's server SDK.
+   - Benefits: typed.
+   - Costs/risks: behaviour differs from the evidenced REST calls; a new
+     dependency.
+3. Adding stored_credential now.
+   - Benefits: follows the documentation's recommendation.
+   - Costs/risks: an untested request shape.
+
+### Decision
+Option 1, with these rules:
+- No authorize call.
+- Order, authorization and capture statuses are kept as separate families.
+  Each raw value is stored and mapped to a neutral state; an unrecognised
+  value maps to "unknown".
+- Only authorization status CREATED permits capture or void.
+- PayPal-Request-Id values are deterministic per attempt and operation.
+- Write operations are never retried automatically. A timeout leaves the
+  outcome unknown, and the next step is to reconcile by reading state.
+- PayPal calls are locked to the sandbox base URL.
+- stored_credential is not sent (TD-004).
+
+### Rationale
+Only evidenced operations are used, and the code never depends on status
+values that were not observed.
+
+### Trade-offs
+- The status value lists must be confirmed in E-1 and against the
+  Payments v2 schema.
+- The deviation from the documented stored_credential recommendation is
+  accepted for the sandbox MVP.
+
+### Verification
+Increment 3: tests assert the exact request shape. E-1 and Increment 4: one
+real capture and one real void are recorded, with identifiers sanitized.
+
+### Revisit trigger
+E-1 contradicts the evidence, or PayPal rejects the request without
+stored_credential.
+
+### Follow-up
+None.
+
+## Decision D-011 — Test strategy and the E-1 evidence gate
+
+Date: 2026-10-30
+Status: Accepted
+Related increment: All
+Related findings: D-004
+Related risks: False confidence from mocks; repeated manual sandbox runs
+
+### Context
+Payment behaviour must be tested without repeated manual sandbox runs.
+Mocks must never be presented as real PayPal results.
+
+### Options considered
+1. Domain unit tests, a faked fetch for the adapter, a stateful fake PayPal
+   with failure injection for the gate, fixtures taken from sanitized real
+   responses, and manual smoke runs.
+   - Benefits: fast and repeatable; covers timeouts, duplicate requests and
+     unknown statuses.
+   - Costs/risks: the fake can drift from real PayPal behaviour.
+2. Automated sandbox tests.
+   - Benefits: real behaviour.
+   - Costs/risks: credentials needed in CI; slow; manual vault approval.
+3. Re-using the Postman runner.
+   - Benefits: already exists.
+   - Costs/risks: does not test our code, and its paths are broken.
+
+### Decision
+Option 1. E-1 is a manual Postman run by the developer that records the
+real lifecycle, sanitized. It is a hard gate before capture and void
+integration (Increment 4). It does not block Increments 1 and 2.
+
+### Rationale
+Real responses keep the fakes honest. Hard safety properties, such as zero
+capture calls on any failure, are tested automatically.
+
+### Trade-offs
+One manual run is required.
+
+### Verification
+E-1 results recorded under docs/evidence/paypal-lifecycle/.
+
+### Revisit trigger
+The fake contradicts real responses.
+
+### Follow-up
+None.
+
+## Decision D-012 — Purchase source: synthetic catalogue and a labelled simulated agent
+
+Date: 2026-10-30
+Status: Accepted
+Related increment: Increments 5, 7
+Related findings: No shopping-agent source is defined in the project documents
+Related risks: The demo implying a real merchant or agent
+
+### Context
+Something has to propose purchases for evaluation.
+
+### Options considered
+1. A synthetic catalogue with preset scenarios and an editable cart,
+   labelled "Simulated shopping agent".
+   - Benefits: deterministic, quick to build, honest.
+   - Costs/risks: not a real agent.
+2. An AI agent that browses real merchants.
+   - Benefits: realistic.
+   - Costs/risks: large scope; unpredictable.
+
+### Decision
+Option 1.
+
+### Rationale
+The gate is the product. The cart source only needs to produce compliant
+and non-compliant proposals reliably.
+
+### Trade-offs
+Less impressive realism.
+
+### Verification
+Increment 7: simulation labels are visible in the UI.
+
+### Revisit trigger
+After the MVP.
+
+### Follow-up
+None.
+
+## Decision D-013 — Local-first hosting; earlier generated code not reused
+
+Date: 2026-10-30
+Status: Accepted
+Related increment: All
+Related findings: Recovery after unapproved implementation, 2026-10-29
+Related risks: A hosting requirement discovered late; scope creep from earlier code
+
+### Context
+The hackathon's hosting requirement is unverified. Code produced earlier
+without approval exists on backup/unapproved-codegen, on
+feat/repo-bootstrap and in stash 1579901.
+
+### Options considered
+1. Develop locally first and verify the hosting rules.
+   - Benefits: no deployment, authentication or storage-durability work up
+     front.
+   - Costs/risks: hosting may be needed late.
+2. Host from the start.
+   - Benefits: no late surprise.
+   - Costs/risks: authentication and durable storage become MVP scope.
+
+### Decision
+Option 1. Earlier generated code stays unapproved. It is not reused
+automatically and may only be consulted with explicit approval for a
+specific increment.
+
+### Rationale
+Keeps every increment reviewable and approved.
+
+### Trade-offs
+Some work may be redone.
+
+### Verification
+Hosting rules checked against the official hackathon rules before
+Increment 8.
+
+### Revisit trigger
+The rules require a hosted demo (TD-007).
+
+### Follow-up
+Verify the hackathon rules.
 
 ## Template for later entries
 
