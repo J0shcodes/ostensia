@@ -6,21 +6,26 @@ Last updated: 2026-10-30
 
 ## Status
 
-- **Current increment:** Increment 0 — documentation and decision-record
-  hygiene.
+- **Current increment:** Increment 1 — workspace and Fastify /health.
+  Implemented and verified; awaiting the walkthrough, comprehension
+  questions and commit authorization.
 - **Passed:**
   - Repository audit (2026-10-29).
   - Directory rename, MIT license and decisions D-001 to D-005,
     committed in 5d426d5.
-  - Architecture plan approved on 2026-10-30 (D-006 to D-013).
+  - Increment 0 (documentation and decision records, D-006 to D-013),
+    committed in 41632a4.
+  - Increment 1 checks (2026-10-30): pnpm test passes (3 files, 20 tests),
+    pnpm typecheck passes, GET /health returns 200 from a real node
+    process, invalid config exits with code 1 without echoing the value.
 - **Broken:** The spike runner (docs/evidence/spike/scripts/run-spike.js)
   points to countersign-spike.* files and a SPIKE_README.md that do not
   exist (TD-001). The application does not use it.
-- **Not yet existing (expected):** package manifests, application code,
-  tests.
-- **Next approved task:** None beyond Increment 0. Increment 1 needs its
+- **Not yet existing (expected):** PayPal code, AI integration,
+  persistence, the frontend.
+- **Next approved task:** None beyond Increment 1. Increment 2 needs its
   own proposal and approval.
-- **Next comprehension gate:** Increment 0 walkthrough.
+- **Next comprehension gate:** Increment 1 walkthrough.
 
 ## Evidence gates
 
@@ -42,8 +47,8 @@ Each increment needs separate approval.
 
 | # | Increment | Status |
 |---|---|---|
-| 0 | Documentation and decision records | In progress |
-| 1 | Workspace and Fastify /health | Not started |
+| 0 | Documentation and decision records | Complete (41632a4) |
+| 1 | Workspace and Fastify /health | Implemented; awaiting walkthrough and commit |
 | 2 | Domain: schemas, canonical hash, evaluator, PayPal status mappings, payment-action rules | Not started |
 | 3 | PayPal adapter: token, create order, read order and authorization | Needs separate approval; E-1 recommended first |
 | 4 | Capture and void integration | Blocked by E-1 |

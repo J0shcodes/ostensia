@@ -206,6 +206,44 @@ capture request id returning the existing result. We have not tested it.
 ### Questions I still cannot answer
 - (To be written by the developer.)
 
+## Topic: Node type stripping and the workspace link
+
+### Plain-language explanation
+Node 24 can run a .ts file directly by deleting the type annotations
+before running it. It does no type checking. TypeScript (tsc --noEmit) is
+a separate step that checks types and produces no output. pnpm links
+packages/domain into apps/api, and the domain package's exports field
+points at its .ts source, so the API imports it with no build step.
+
+### Where it appears in Ostensia
+package.json and tsconfig.base.json at the root, packages/domain/package.json
+(exports), apps/api/src/server.ts (the import of DOMAIN_NAME) and the
+start script in apps/api/package.json.
+
+### Why this design was selected
+It needs no tsx and no compile step, so there is less to understand and
+less to break. The tsconfig flags make TypeScript reject syntax that
+Node cannot strip, so a type check that passes means the files use only
+syntax Node can strip. It does not prove they run correctly.
+
+### Alternative
+tsx, or compiling the domain package to JavaScript. Neither was selected
+because they add a dependency or a build step with no benefit yet.
+
+### Failure case
+Using syntax that needs real compilation, such as an enum. tsc fails
+because of erasableSyntaxOnly, before Node ever runs it.
+
+### Evidence
+Increment 1: node ran apps/api/src/index.ts with the pnpm start flags and
+GET /health returned the domain package's name (see D-014).
+
+### Explain it to a judge
+(To be written by the developer.)
+
+### Questions I still cannot answer
+- (To be written by the developer.)
+
 ## Template for later entries
 
 ## Topic: [Concept]

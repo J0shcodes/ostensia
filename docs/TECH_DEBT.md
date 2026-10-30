@@ -181,7 +181,8 @@ Required evidence or dependency: The developer's permission to delete them.
 Estimated future size: S
 Proposed resolution: Delete them before the first install in Increment 1.
 Review trigger: Increment 1 proposal.
-Status: Open
+Status: Resolved (2026-10-30, Increment 1: the three folders were deleted
+with the developer's permission before the install)
 
 ## Template for later entries
 

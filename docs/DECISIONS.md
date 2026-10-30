@@ -113,8 +113,9 @@ npm workspaces is the closest alternative if ease of running matters
 more than strictness.
 
 ### Verification
-Not yet verified. Nothing has been created. Increment 1 must show that
-apps/api can import packages/domain and that tests run.
+Verified in Increment 1 (2026-10-30): pnpm install resolved the three
+workspace projects, apps/api imports packages/domain through the workspace
+link, and tests and typecheck run from the root.
 
 ### Revisit trigger
 The workspace link between packages fails in a way that costs more time
@@ -122,10 +123,9 @@ than the isolation is worth, or the hackathon run-ability criterion
 requires npm only.
 
 ### Follow-up
-Open question for Increment 1: how apps/api consumes packages/domain
-(TypeScript source through a runner such as tsx, Node's native type
-stripping, or compiled output). It has not been tested and will be
-decided separately with evidence.
+Answered in Increment 1 (see D-014): apps/api consumes the TypeScript
+source of packages/domain directly through Node's native type stripping.
+No tsx and no build step.
 
 ## Decision D-003 — MIT license
 
@@ -176,7 +176,8 @@ grant matters, or a decision to use a legal name as the holder.
 
 ### Follow-up
 - Set "license": "MIT" in the root and every workspace package.json in
-  Increment 1, and check that they match.
+  Increment 1, and check that they match. Done in Increment 1: the root,
+  apps/api and packages/domain all say MIT.
 - Before publishing, review every dependency's license and complete the
   manual sanitization and provenance review of the spike artifacts.
 - Rename "Countersign" references in the spike collection, runner file
@@ -232,7 +233,8 @@ One extra dev dependency, whose exact version will be named and
 justified in the Increment 1 proposal.
 
 ### Verification
-Not yet verified. Nothing has been installed or run.
+Verified in Increment 1 (2026-10-30): Vitest 4.1.12 is installed and 20
+tests pass from the root with pnpm test.
 
 ### Revisit trigger
 A quick test in Increment 1 showing that native type stripping works
@@ -289,8 +291,8 @@ not needed until the gate works.
 No UI exists until a later increment.
 
 ### Verification
-Not yet verified. Increment 1 acceptance criteria will be proposed and
-approved separately before any file is created.
+Verified in Increment 1 (2026-10-30): the scaffold contains only the
+approved files, and GET /health returned 200 from a real process.
 
 ### Revisit trigger
 The workspace link or Fastify setup takes much longer than planned.
@@ -699,6 +701,76 @@ The rules require a hosted demo (TD-007).
 
 ### Follow-up
 Verify the hackathon rules.
+
+## Decision D-014 — Toolchain versions and how the API consumes the domain package
+
+Date: 2026-10-30
+Status: Accepted
+Related increment: Increment 1
+Related findings: npm registry check on 2026-10-30; D-002 open question
+Related risks: Newly released tool majors; syntax that Node cannot run directly
+
+### Context
+Increment 1 needed exact versions and an answer to D-002's open question
+about how apps/api consumes packages/domain. On 2026-10-30 the latest
+releases were TypeScript 7.0.2 (2026-07-08), Vitest 5.0.5 (2026-10-15),
+Fastify 5.12.7 and @types/node 26.6.6.
+
+### Options considered
+1. TypeScript 6.0.3 and Vitest 4.1.12.
+   - Benefits: the versions already approved; Vitest 4 declares its Vite
+     dependency itself.
+   - Costs/risks: one major version behind on each.
+2. TypeScript 7.0.2 and Vitest 5.0.5.
+   - Benefits: newest releases.
+   - Costs/risks: a new compiler; Vitest 5 is two weeks old and needs Vite
+     as a separate direct dependency.
+3. Consuming the domain package through tsx or compiled output.
+   - Benefits: no reliance on Node's type stripping.
+   - Costs/risks: an extra dependency or a build step.
+
+### Decision
+Option 1, with every version pinned exactly: typescript 6.0.3, vitest
+4.1.12, fastify 5.12.7, @types/node 24.19.2 (which matches the Node 24
+runtime). The domain package's exports field points at src/index.ts, and
+the API runs with node src/index.ts using native type stripping.
+
+tsconfig.base.json makes TypeScript reject syntax that Node cannot strip
+(erasableSyntaxOnly, verbatimModuleSyntax, allowImportingTsExtensions)
+and sets noEmit, so TypeScript only typechecks. Node types are loaded
+only in apps/api, so the domain package cannot use Node globals by
+accident. The API binds to 127.0.0.1 only, and config errors name the
+variable but never echo its value.
+
+### Rationale
+Pinned, already-approved versions keep the scaffold reviewable, and native
+type stripping removes a dependency and a build step.
+
+### Trade-offs
+- Both tools are one major version behind, and upgrades are deferred.
+- The API depends on Node 24's type stripping.
+- Increment 2 must decide how canonical hashing gets SHA-256 without
+  giving the domain package Node types.
+- D-004 named a successful native-stripping test as a possible reason to
+  reconsider Vitest. Vitest stays, because it was approved and gives
+  mocking and extensionless imports. The question can be revisited.
+
+### Verification
+Increment 1, on Windows with Node v24.12.0 and pnpm 10.28.0:
+- pnpm test: 3 files, 20 tests passed.
+- pnpm typecheck: exit code 0 for both packages.
+- A plain node process started with the pnpm start command's flags
+  returned 200 {"status":"ok","domain":"@ostensia/domain"} from
+  GET /health, and the domain value comes from the workspace import.
+- PORT and NODE_ENV set to invalid values exited with code 1, and the
+  output did not contain the bad values.
+
+### Revisit trigger
+Native type stripping fails on another platform or Node version, or the
+dependency upgrades become worth the cost.
+
+### Follow-up
+Decide the SHA-256 approach in the Increment 2 proposal.
 
 ## Template for later entries
 
