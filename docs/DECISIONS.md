@@ -772,6 +772,177 @@ dependency upgrades become worth the cost.
 ### Follow-up
 Decide the SHA-256 approach in the Increment 2 proposal.
 
+## Decision D-015 — Canonical mandate binding, with SHA-256 computed in the API
+
+Date: 2026-10-31
+Status: Accepted
+Related increment: Increment 2a
+Related findings: D-009; D-014 (domain package has no Node types)
+Related risks: Hash not matching the mandate; non-deterministic encoding; cryptographic mistakes
+
+### Context
+The mandate hash goes into PayPal's custom_id (D-009). The domain package
+must stay free of I/O and of Node types (D-014), but SHA-256 normally
+comes from node:crypto.
+
+### Options considered
+1. The domain produces the canonical string; apps/api hashes it with
+   node:crypto.
+   - Benefits: the domain stays pure; Node's audited SHA-256 is used;
+     hashing is synchronous.
+   - Costs/risks: the hash is computed in the API, so the evaluator cannot
+     recompute it.
+2. Web Crypto (crypto.subtle) inside the domain.
+   - Benefits: everything in one package.
+   - Costs/risks: asynchronous; needs extra type libraries in the domain.
+3. A hand-written SHA-256 in the domain.
+   - Benefits: pure and synchronous.
+   - Costs/risks: our own cryptographic code.
+
+### Decision
+Option 1.
+- The binding payload is { id, version, terms }. status, confirmedAt,
+  intentSummary and hash are excluded, so revoking a mandate does not
+  change its hash.
+- canonicalize writes object keys in sorted (UTF-16 code unit) order and
+  keeps array order. It accepts only null, booleans, strings, safe
+  integers, arrays and plain objects, and throws on anything else
+  (undefined, NaN, fractions, bigint, Date, Map, class instances, sparse
+  arrays, nesting deeper than 32).
+- Strings are not Unicode-normalised.
+- Ids (mandate, product, variant) must match
+  ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$, so ids compare, hash and print
+  predictably.
+
+### Rationale
+The only cryptography is Node's own, and the domain stays pure and
+testable.
+
+### Trade-offs
+- The evaluator compares the stored hash and never recomputes it.
+- Reordering a mandate's items changes its hash.
+- Visually identical strings in different Unicode forms hash differently.
+- The hash is not a signature (D-009).
+
+### Verification
+Increment 2a: sha256Hex matches the published SHA-256 vectors for "abc" and
+the empty string; the hash of the golden canonical string is pinned and was
+computed with sha256sum, not with this code; tests cover key order, nesting,
+Unicode and every rejected value type.
+
+### Revisit trigger
+A need for signatures, or a mandate schema version 2.
+
+### Follow-up
+- The gate (Increment 5) must recompute hashMandate and compare it with the
+  stored mandate.hash before evaluating.
+- Increment 2b compares PayPal's custom_id with mandate.hash.
+
+## Decision D-016 — Zod 4.6.7 as a runtime dependency of the domain package
+
+Date: 2026-10-31
+Status: Accepted
+Related increment: Increment 2a
+Related findings: D-009; npm registry check on 2026-10-30
+Related risks: A new runtime dependency in the policy code
+
+### Context
+D-009 chose Zod schemas for mandates and proposals, subject to approval of
+the dependency.
+
+### Options considered
+1. Zod 4.6.7.
+   - Benefits: one source for types and validation; strict objects reject
+     unknown keys; z.toJSONSchema can serve AI structured output later.
+   - Costs/risks: a runtime dependency in the policy code.
+2. Hand-written validators.
+   - Benefits: no dependency.
+   - Costs/risks: duplicated types and more room for gaps.
+3. JSON Schema with Ajv.
+   - Benefits: native format for AI structured output.
+   - Costs/risks: types drift from the schema.
+
+### Decision
+Option 1. Zod 4.6.7 is pinned exactly and is a dependency of
+packages/domain only. The release date is 2026-10-12, the license is MIT
+and the installed package declares no dependencies of its own.
+
+### Rationale
+It is the smallest way to get types and runtime validation from one
+definition.
+
+### Trade-offs
+- Unknown keys are rejected, so an AI draft with extra keys fails
+  validation. How to handle that is decided in the AI increment.
+- The domain gains one runtime dependency.
+
+### Verification
+Increment 2a: schema tests for every rejected shape; the purity test allows
+only "zod" and relative imports in the domain sources.
+
+### Revisit trigger
+A Zod release that changes validation behaviour this code relies on.
+
+### Follow-up
+Include Zod in the dependency license review (TD-002).
+
+## Decision D-017 — Pre-check evaluator semantics
+
+Date: 2026-10-31
+Status: Accepted
+Related increment: Increment 2a
+Related findings: CLAUDE.md section 7; D-007
+Related risks: Rules bypassed by splitting or under-declaring; arithmetic overflow; unclear boundaries
+
+### Context
+The pre-check runs before any PayPal call (D-007) and must be
+block-by-default. Several boundaries needed an explicit choice.
+
+### Options considered
+1. Collect every violation, with a fixed order and a fixed explanation per
+   code.
+   - Benefits: the user sees the whole picture; results are reproducible.
+   - Costs/risks: slightly more code.
+2. Stop at the first violation.
+   - Benefits: simpler.
+   - Costs/risks: a blocked purchase would be explained one rule at a time.
+
+### Decision
+Option 1, with these rules.
+- Invalid mandate, proposal or clock blocks. All three are reported
+  together, and nothing else is evaluated.
+- The total is always computed from unit prices and quantities. The
+  proposal's declared total is only compared with it.
+- Quantity is summed per product across all lines.
+- A mandate is valid only while expiresAt is later than now. An expiry equal
+  to now, or one that cannot be parsed, counts as expired.
+- If the mandate lists allowed variants, every line for that product needs
+  one of them; a missing variant is blocked. With no list, any variant is
+  allowed.
+- Currency must be exactly "USD".
+- A total that leaves the safe-integer range blocks with AMOUNT_OVERFLOW.
+- Input bounds: quantity up to 1,000,000, at most 50 mandate items and 100
+  purchase lines (TD-012).
+
+### Rationale
+Each rule closes a specific bypass: splitting a product over lines,
+declaring a low total, expiring at the boundary, or overflowing the sum.
+
+### Trade-offs
+- The bounds are arbitrary MVP limits.
+- Objects with throwing property getters were not tested (TD-013).
+
+### Verification
+Increment 2a: 257 tests including boundary and bypass cases, a 2000-case
+seeded comparison against an independent BigInt implementation, and 16 of 16
+deliberate rule mutations caught.
+
+### Revisit trigger
+Real catalogue data that the bounds or the id charset reject.
+
+### Follow-up
+Increment 2b adds the final evaluation with PayPal-observed facts.
+
 ## Template for later entries
 
 ### Decision D-NNN — [Title]

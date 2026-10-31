@@ -244,6 +244,112 @@ GET /health returned the domain package's name (see D-014).
 ### Questions I still cannot answer
 - (To be written by the developer.)
 
+## Topic: Canonical JSON and the mandate hash
+
+### Plain-language explanation
+JSON can describe the same data in many ways: keys in any order, extra
+spaces. A hash of the text would change each time. Canonical JSON picks one
+way to write it (keys sorted, no spaces, only whole numbers), so the same
+mandate always gives the same text and therefore the same SHA-256.
+
+### Where it appears in Ostensia
+packages/domain/src/canonical.ts (canonicalize, canonicalMandateBinding)
+and apps/api/src/mandate-hash.ts (hashMandate).
+
+### Why this design was selected
+The domain package produces the text and stays pure. Only the API touches
+node:crypto (D-015). The hash covers what the user confirmed and what is
+enforced (id, version, terms), so revoking a mandate does not change it.
+
+### Alternative
+Hashing JSON.stringify output directly. It was not selected because the
+result depends on key order.
+
+### Failure case
+A mandate containing undefined, a fraction or a Date. canonicalize throws,
+so no hash is produced for something that cannot be written exactly.
+
+### Evidence
+canonical.test.ts (golden string, key order, rejected values) and
+mandate-hash.test.ts (the golden hash was computed with sha256sum).
+
+### Explain it to a judge
+(To be written by the developer.)
+
+### Questions I still cannot answer
+- (To be written by the developer.)
+
+## Topic: Why quantity is summed per product
+
+### Plain-language explanation
+A mandate says "at most 2 jackets". If each cart line were checked alone, a
+cart with three lines of one jacket each would pass every line check and
+still buy three. The evaluator adds up the quantity of each product across
+all lines before comparing with the limit. The total price works the same
+way: it is computed from unit prices and quantities, and the declared total
+is only compared with it.
+
+### Where it appears in Ostensia
+packages/domain/src/evaluate.ts (quantityByProduct, computeTotal).
+
+### Why this design was selected
+Each rule closes a specific bypass (D-017). The caller never decides the
+total.
+
+### Alternative
+Checking each line alone and trusting the declared total. Neither was
+selected because both are easy to get around.
+
+### Failure case
+A cart that splits one product over lines, or declares a low total. The
+evaluator blocks with QUANTITY_EXCEEDED or TOTAL_MISMATCH.
+
+### Evidence
+evaluate.test.ts ("sums quantity per product..." and the total tests).
+Mutating the sum into a per-line check made 3 tests fail.
+
+### Explain it to a judge
+(To be written by the developer.)
+
+### Questions I still cannot answer
+- (To be written by the developer.)
+
+## Topic: How we know the tests are meaningful
+
+### Plain-language explanation
+Passing tests only show that the code agrees with the tests. Two extra
+checks show that the tests can actually fail. A differential test compares
+the evaluator with a second, simpler implementation (using BigInt) on 2000
+seeded random cases. A mutation check deliberately breaks one rule at a
+time and confirms that some test fails.
+
+### Where it appears in Ostensia
+packages/domain/src/evaluate-differential.test.ts, and the mutation run
+recorded in BUILD_STATUS (16 of 16 caught).
+
+### Why this design was selected
+The safety claim is "never capture unless the result is allow", so the
+rules need tests that notice when a rule is weakened.
+
+### Alternative
+Only example-based tests. They were not selected because they can all pass
+while a boundary such as > versus >= is wrong.
+
+### Failure case
+A mutation that no test catches. It would show a rule with no real test.
+
+### Evidence
+The mutation run changed a rule in evaluate.ts, money.ts or canonical.ts 16
+times, and each change made at least one test fail. One change (removing the
+range check in mulMinor) was caught only by the money tests, because the
+addition step also catches the overflow.
+
+### Explain it to a judge
+(To be written by the developer.)
+
+### Questions I still cannot answer
+- (To be written by the developer.)
+
 ## Template for later entries
 
 ## Topic: [Concept]

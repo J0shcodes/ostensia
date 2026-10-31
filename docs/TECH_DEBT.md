@@ -184,6 +184,41 @@ Review trigger: Increment 1 proposal.
 Status: Resolved (2026-10-30, Increment 1: the three folders were deleted
 with the developer's permission before the install)
 
+## Item TD-012 — Input bounds and the id character set are arbitrary MVP limits
+
+Date identified: 2026-10-31
+Related increment: Increment 2a
+Why it was deferred: Real catalogue data does not exist yet (D-012).
+Current limitation: Quantity is capped at 1,000,000, a mandate has at most
+50 items, a purchase at most 100 lines, and ids must match
+^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$.
+Impact if left unresolved: A legitimate id or order size could be rejected
+as invalid.
+Required evidence or dependency: The synthetic catalogue (Increment 5 or 7)
+or real catalogue data.
+Estimated future size: S
+Proposed resolution: Adjust the limits to match the catalogue.
+Review trigger: A catalogue id or order size is rejected.
+Status: Accepted for MVP
+
+## Item TD-013 — Evaluator behaviour with hostile input objects is untested
+
+Date identified: 2026-10-31
+Related increment: Increment 2a
+Why it was deferred: Inputs are expected to come from parsed JSON.
+Current limitation: Garbage values, circular objects and unknown keys are
+tested. Objects whose property getters throw, and proxies, were not tested
+and may make validation throw instead of returning a block decision.
+Impact if left unresolved: An exception instead of a block. The gate treats
+an exception as no capture, so this is a robustness gap, not a way to
+capture.
+Required evidence or dependency: A test with throwing getters, and a
+decision on whether the evaluator must be total.
+Estimated future size: S
+Proposed resolution: Test it, and either document or handle it.
+Review trigger: Increment 5 (gate), when input handling is wired up.
+Status: Open
+
 ## Template for later entries
 
 ## Item TD-NNN — [Title]
