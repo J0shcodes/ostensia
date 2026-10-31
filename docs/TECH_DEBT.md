@@ -82,7 +82,9 @@ during planning.
 Current limitation: Only CREATED, CAPTURED, PARTIALLY_CAPTURED, VOIDED,
 DENIED, PENDING and EXPIRED are expected for authorizations, and only
 COMPLETED and PENDING were observed for captures in the spike tests. The
-mapping treats everything else as "unknown".
+mapping treats everything else as "unknown". Increment 2b implements exactly
+these lists in packages/domain/src/paypal-status.ts (D-018), plus order
+statuses APPROVED and COMPLETED.
 Impact if left unresolved: A valid status could be treated as "unknown"
 and block a legitimate action.
 Required evidence or dependency: E-1 results and the Payments v2 schema.

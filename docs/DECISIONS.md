@@ -941,7 +941,92 @@ deliberate rule mutations caught.
 Real catalogue data that the bounds or the id charset reject.
 
 ### Follow-up
-Increment 2b adds the final evaluation with PayPal-observed facts.
+Increment 2b adds the final evaluation with PayPal-observed facts (D-018).
+
+## Decision D-018 — Final evaluation, status mappings and the payment-action rule
+
+Date: 2026-10-31
+Status: Accepted
+Related increment: Increment 2b
+Related findings: D-007, D-010; CLAUDE.md section 7
+Related risks: Capturing on an unreadable decision; an irreversible void on an unreadable decision; treating the hash as a tamper check; reading PayPal strings loosely
+Related questions: Whether the status lists are complete (TD-005, E-1)
+
+### Context
+D-007 has two evaluation points and a rule that turns the final decision
+and the authorization status into a PayPal write. Increment 2a built the
+first evaluation point. Four choices needed an explicit decision.
+
+### Options considered
+1. A missing custom_id.
+   - BINDING_MISMATCH: a missing binding is a binding failure.
+   - OBSERVATION_INVALID: the observation is incomplete.
+2. A decision that is malformed, or a block with no violations.
+   - No action: nothing is written.
+   - Void: treat any block as a reason to release the hold.
+3. Status lists.
+   - Only the values in our records (TD-005).
+   - PayPal's full documented lists, added now.
+4. Converting PayPal's amount string ("95.00") to cents.
+   - In the adapter, in Increment 3, checked against real E-1 responses.
+   - A pure parser in the domain now.
+
+### Decision
+- Option 1: BINDING_MISMATCH. customId is null when PayPal returned none.
+- Option 2: no action. A void cannot be undone, and D-010 says anything not
+  understood performs no write. The cost is that an unreadable block leaves
+  funds held until the authorization expires.
+- Option 3: only values in our records. Only authorization "created" permits
+  a write, so an unlisted value can only cause "no action".
+- Option 4: in the adapter.
+
+Rules of the final evaluation (finalEvaluatePurchase):
+- It repeats every pre-check rule at the current time, then compares what
+  PayPal reported: amount against the computed total (not the declared one),
+  currency exactly, and custom_id exactly and case-sensitively against
+  mandate.hash.
+- An invalid observation is reported with the other invalid inputs.
+- BINDING_MISMATCH compares the echoed custom_id with the stored hash. It
+  does not recompute the hash, so it is not a tamper check. That stays in
+  the gate (D-015).
+- The pre-check and the final evaluation share one internal function, so the
+  policy rules cannot drift apart.
+
+Status mappings are exact and case-sensitive, with three separate families
+(order, authorization, capture). Unlisted values and non-strings map to
+"unknown".
+
+nextPaymentAction(decision, authorization) takes both arguments as unknown.
+It returns capture for a valid allow, void for a valid block, and only when
+the authorization is exactly "created". Everything else, including a raw
+PayPal string such as "CREATED", returns none.
+
+### Rationale
+Each default is the safe one: no decision means no write.
+
+### Trade-offs
+- Status lists may be incomplete; a legitimate status could give "no
+  action" until E-1 widens them.
+- The caller must pass the final decision. The domain cannot know which
+  decision it was given, so the ordering is enforced by the gate
+  (Increment 5).
+
+### Verification
+Increment 2b: 466 tests in total. This covers every new violation code,
+each boundary, a 24-case action table, malformed decisions, near-miss status
+strings, and a 2000-case seeded comparison with the BigInt reference
+(a matching observation allows exactly when the reference does, and each of
+four changed observations blocks). 18 of 18 deliberate mutations were
+caught.
+
+### Revisit trigger
+E-1 shows other status values, or PayPal reports amounts in a form the
+adapter cannot convert exactly.
+
+### Follow-up
+Increment 3 converts PayPal amount strings to minor units. Increment 5 wires
+the two evaluation points, recomputes the hash and passes the final decision
+to nextPaymentAction.
 
 ## Template for later entries
 
