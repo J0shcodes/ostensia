@@ -1,6 +1,7 @@
 // Shared test data. Not exported from index.ts. All ids, prices and hashes are
 // synthetic.
 import type { ConfirmedMandate, MandateTerms } from "./mandate.ts";
+import type { ObservedPayment } from "./observation.ts";
 import type { PurchaseProposal } from "./purchase.ts";
 
 export const HASH_A = "a".repeat(64);
@@ -43,6 +44,11 @@ export function makeProposal(overrides: Partial<PurchaseProposal> = {}): Purchas
     ],
     ...overrides,
   };
+}
+
+// What PayPal would report for the baseline purchase.
+export function makeObservation(overrides: Partial<ObservedPayment> = {}): ObservedPayment {
+  return { amountMinor: 9500, currency: "USD", customId: HASH_A, ...overrides };
 }
 
 export function deepFreeze<T>(value: T): T {

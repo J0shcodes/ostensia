@@ -9,5 +9,8 @@ export * from "./evaluate.ts";
 export * from "./explain.ts";
 export * from "./mandate.ts";
 export * from "./money.ts";
+export * from "./observation.ts";
+export * from "./payment-action.ts";
+export * from "./paypal-status.ts";
 export * from "./primitives.ts";
 export * from "./purchase.ts";

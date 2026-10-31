@@ -2,34 +2,86 @@ import type { Decision, Violation } from "./decision.ts";
 import { ConfirmedMandateSchema } from "./mandate.ts";
 import type { ConfirmedMandate } from "./mandate.ts";
 import { addMinor, mulMinor } from "./money.ts";
+import { ObservedPaymentSchema } from "./observation.ts";
+import type { ObservedPayment } from "./observation.ts";
 import { PurchaseProposalSchema } from "./purchase.ts";
 import type { PurchaseLine, PurchaseProposal } from "./purchase.ts";
 
-// The pre-check runs before any PayPal call (D-007). It is block-by-default:
-// it returns "allow" only when the mandate, the proposal and the clock are all
-// valid and no rule is violated. It never reads the clock itself; `now` is an
-// argument.
+// There are two evaluation points (D-007). Both are block-by-default: they
+// return "allow" only when every input is valid and no rule is violated. Neither
+// reads the clock itself; `now` is an argument.
+//
+// The pre-check runs before any PayPal call. The final evaluation runs after
+// PayPal has authorized: it repeats every pre-check rule at the current time and
+// also compares what PayPal reported with the confirmed mandate.
 
 export function precheckPurchase(mandateInput: unknown, proposalInput: unknown, now: unknown): Decision {
+  return evaluate(mandateInput, proposalInput, now, undefined);
+}
+
+export function finalEvaluatePurchase(
+  mandateInput: unknown,
+  proposalInput: unknown,
+  observedInput: unknown,
+  now: unknown,
+): Decision {
+  return evaluate(mandateInput, proposalInput, now, { input: observedInput });
+}
+
+// `observation` is undefined for the pre-check. It is wrapped so that a missing
+// observation in the final evaluation (input undefined) is still validated, and
+// so reported as invalid, instead of being mistaken for the pre-check.
+function evaluate(
+  mandateInput: unknown,
+  proposalInput: unknown,
+  now: unknown,
+  observation: { readonly input: unknown } | undefined,
+): Decision {
   const mandate = ConfirmedMandateSchema.safeParse(mandateInput);
   const proposal = PurchaseProposalSchema.safeParse(proposalInput);
+  const observed = observation === undefined ? undefined : ObservedPaymentSchema.safeParse(observation.input);
   const nowMs = now instanceof Date ? now.getTime() : Number.NaN;
 
-  // Invalid input is reported, all three kinds at once, and nothing else is
-  // evaluated.
+  // Invalid input is reported, all kinds at once, and nothing else is evaluated.
   const inputViolations: Violation[] = [];
   if (!mandate.success) inputViolations.push({ code: "MANDATE_INVALID" });
   if (!proposal.success) inputViolations.push({ code: "PROPOSAL_INVALID" });
+  if (observed !== undefined && !observed.success) inputViolations.push({ code: "OBSERVATION_INVALID" });
   if (Number.isNaN(nowMs)) inputViolations.push({ code: "CLOCK_INVALID" });
-  if (!mandate.success || !proposal.success || Number.isNaN(nowMs)) {
+  if (!mandate.success || !proposal.success || (observed !== undefined && !observed.success) || Number.isNaN(nowMs)) {
     return { decision: "block", violations: inputViolations };
   }
 
   const { violations, total } = collectPolicyViolations(mandate.data, proposal.data, nowMs);
+  if (observed?.success) {
+    violations.push(...collectObservedViolations(mandate.data, observed.data, total));
+  }
   if (violations.length > 0 || total === null) {
     return { decision: "block", violations };
   }
   return { decision: "allow", computedTotalMinor: total };
+}
+
+// What PayPal reported must match the confirmed mandate and the total we
+// computed ourselves. The proposal's declared total plays no part here.
+//
+// BINDING_MISMATCH compares the custom_id PayPal echoed with the hash stored on
+// the mandate. It does not recompute the hash, so it cannot detect an edited
+// stored mandate. That check belongs to the gate (D-015).
+function collectObservedViolations(
+  mandate: ConfirmedMandate,
+  observed: ObservedPayment,
+  computedTotal: number | null,
+): Violation[] {
+  const violations: Violation[] = [];
+  // With an overflowing total there is nothing to compare against;
+  // AMOUNT_OVERFLOW already blocks.
+  if (computedTotal !== null && observed.amountMinor !== computedTotal) {
+    violations.push({ code: "OBSERVED_AMOUNT_MISMATCH", expected: computedTotal, actual: observed.amountMinor });
+  }
+  if (observed.currency !== mandate.terms.currency) violations.push({ code: "OBSERVED_CURRENCY_MISMATCH" });
+  if (observed.customId !== mandate.hash) violations.push({ code: "BINDING_MISMATCH" });
+  return violations;
 }
 
 // Violations are listed in a fixed order: mandate-level rules, then each line

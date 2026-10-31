@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { ConfirmedMandate, MandateItem } from "./mandate.ts";
-import { precheckPurchase } from "./evaluate.ts";
+import { finalEvaluatePurchase, precheckPurchase } from "./evaluate.ts";
 import type { PurchaseLine, PurchaseProposal } from "./purchase.ts";
-import { NOW, makeMandate } from "./test-fixtures.ts";
+import { NOW, makeMandate, makeObservation } from "./test-fixtures.ts";
 
 // Differential test: the evaluator is compared with a second, deliberately
 // simple implementation that uses BigInt, so it cannot share an overflow or
@@ -126,5 +126,35 @@ describe("precheckPurchase against a BigInt reference", () => {
     // Both outcomes must be common, or the comparison proves little.
     expect(allows).toBeGreaterThan(100);
     expect(blocks).toBeGreaterThan(100);
+  });
+});
+
+describe("finalEvaluatePurchase against the same reference", () => {
+  it("allows exactly when the reference allows and the observation matches, for 2000 seeded cases", () => {
+    const rand = mulberry32(20261101);
+    let allows = 0;
+    for (let index = 0; index < 2000; index++) {
+      const { mandate, proposal } = generateCase(rand);
+      const expected = oracleAllows(mandate, proposal, NOW.getTime());
+      // When the reference allows, the declared total equals the exact total,
+      // so it is also the amount PayPal should report.
+      const matching = makeObservation({ amountMinor: proposal.declaredTotalMinor });
+      const label = `case ${index}: ${JSON.stringify({ mandate: mandate.terms, proposal })}`;
+
+      expect(finalEvaluatePurchase(mandate, proposal, matching, NOW).decision === "allow", label).toBe(expected);
+
+      if (!expected) continue;
+      allows++;
+      const mutations = [
+        makeObservation({ amountMinor: proposal.declaredTotalMinor + 1 }),
+        makeObservation({ amountMinor: proposal.declaredTotalMinor, currency: "EUR" }),
+        makeObservation({ amountMinor: proposal.declaredTotalMinor, customId: null }),
+        makeObservation({ amountMinor: proposal.declaredTotalMinor, customId: "b".repeat(64) }),
+      ];
+      for (const mutated of mutations) {
+        expect(finalEvaluatePurchase(mandate, proposal, mutated, NOW).decision, label).toBe("block");
+      }
+    }
+    expect(allows).toBeGreaterThan(100);
   });
 });

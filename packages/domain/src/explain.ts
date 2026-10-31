@@ -19,6 +19,8 @@ export function explainViolation(violation: Violation): string {
       return "The mandate is missing or invalid, so the purchase could not be checked.";
     case "PROPOSAL_INVALID":
       return "The proposed purchase is missing or invalid, so it could not be checked.";
+    case "OBSERVATION_INVALID":
+      return "The payment details reported by PayPal were missing or invalid, so they could not be checked.";
     case "CLOCK_INVALID":
       return "The current time was not valid, so the mandate's expiry could not be checked.";
     case "MANDATE_MISMATCH":
@@ -47,6 +49,12 @@ export function explainViolation(violation: Violation): string {
       return `The purchase total of ${money(violation.actual)} is above the mandate limit of ${money(violation.limit)}.`;
     case "TOTAL_MISMATCH":
       return `The declared total of ${money(violation.actual)} does not match the calculated total of ${money(violation.expected)}.`;
+    case "OBSERVED_AMOUNT_MISMATCH":
+      return `PayPal reports an amount of ${money(violation.actual)}, but the calculated purchase total is ${money(violation.expected)}.`;
+    case "OBSERVED_CURRENCY_MISMATCH":
+      return "The currency PayPal reports does not match the mandate currency (USD).";
+    case "BINDING_MISMATCH":
+      return "The payment is not bound to the confirmed mandate: the reference stored with the payment does not match the mandate's hash.";
     default: {
       const unhandled: never = violation.code;
       return String(unhandled);

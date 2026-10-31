@@ -39,6 +39,22 @@ describe("explainViolation", () => {
       { code: "TOTAL_MISMATCH", expected: 9500, actual: 100 },
       "The declared total of $1.00 does not match the calculated total of $95.00.",
     ],
+    [
+      { code: "OBSERVATION_INVALID" },
+      "The payment details reported by PayPal were missing or invalid, so they could not be checked.",
+    ],
+    [
+      { code: "OBSERVED_AMOUNT_MISMATCH", expected: 9500, actual: 9501 },
+      "PayPal reports an amount of $95.01, but the calculated purchase total is $95.00.",
+    ],
+    [
+      { code: "OBSERVED_CURRENCY_MISMATCH" },
+      "The currency PayPal reports does not match the mandate currency (USD).",
+    ],
+    [
+      { code: "BINDING_MISMATCH" },
+      "The payment is not bound to the confirmed mandate: the reference stored with the payment does not match the mandate's hash.",
+    ],
   ])("writes the expected text for %j", (violation, expected) => {
     expect(explainViolation(violation)).toBe(expected);
   });
