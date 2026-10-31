@@ -244,6 +244,190 @@ GET /health returned the domain package's name (see D-014).
 ### Questions I still cannot answer
 - (To be written by the developer.)
 
+## Topic: Canonical JSON and the mandate hash
+
+### Plain-language explanation
+JSON can describe the same data in many ways: keys in any order, extra
+spaces. A hash of the text would change each time. Canonical JSON picks one
+way to write it (keys sorted, no spaces, only whole numbers), so the same
+mandate always gives the same text and therefore the same SHA-256.
+
+### Where it appears in Ostensia
+packages/domain/src/canonical.ts (canonicalize, canonicalMandateBinding)
+and apps/api/src/mandate-hash.ts (hashMandate).
+
+### Why this design was selected
+The domain package produces the text and stays pure. Only the API touches
+node:crypto (D-015). The hash covers what the user confirmed and what is
+enforced (id, version, terms), so revoking a mandate does not change it.
+
+### Alternative
+Hashing JSON.stringify output directly. It was not selected because the
+result depends on key order.
+
+### Failure case
+A mandate containing undefined, a fraction or a Date. canonicalize throws,
+so no hash is produced for something that cannot be written exactly.
+
+### Evidence
+canonical.test.ts (golden string, key order, rejected values) and
+mandate-hash.test.ts (the golden hash was computed with sha256sum).
+
+### Explain it to a judge
+(To be written by the developer.)
+
+### Questions I still cannot answer
+- (To be written by the developer.)
+
+## Topic: Why quantity is summed per product
+
+### Plain-language explanation
+A mandate says "at most 2 jackets". If each cart line were checked alone, a
+cart with three lines of one jacket each would pass every line check and
+still buy three. The evaluator adds up the quantity of each product across
+all lines before comparing with the limit. The total price works the same
+way: it is computed from unit prices and quantities, and the declared total
+is only compared with it.
+
+### Where it appears in Ostensia
+packages/domain/src/evaluate.ts (quantityByProduct, computeTotal).
+
+### Why this design was selected
+Each rule closes a specific bypass (D-017). The caller never decides the
+total.
+
+### Alternative
+Checking each line alone and trusting the declared total. Neither was
+selected because both are easy to get around.
+
+### Failure case
+A cart that splits one product over lines, or declares a low total. The
+evaluator blocks with QUANTITY_EXCEEDED or TOTAL_MISMATCH.
+
+### Evidence
+evaluate.test.ts ("sums quantity per product..." and the total tests).
+Mutating the sum into a per-line check made 3 tests fail.
+
+### Explain it to a judge
+(To be written by the developer.)
+
+### Questions I still cannot answer
+- (To be written by the developer.)
+
+## Topic: How we know the tests are meaningful
+
+### Plain-language explanation
+Passing tests only show that the code agrees with the tests. Two extra
+checks show that the tests can actually fail. A differential test compares
+the evaluator with a second, simpler implementation (using BigInt) on 2000
+seeded random cases. A mutation check deliberately breaks one rule at a
+time and confirms that some test fails.
+
+### Where it appears in Ostensia
+packages/domain/src/evaluate-differential.test.ts, and the mutation run
+recorded in BUILD_STATUS (16 of 16 caught).
+
+### Why this design was selected
+The safety claim is "never capture unless the result is allow", so the
+rules need tests that notice when a rule is weakened.
+
+### Alternative
+Only example-based tests. They were not selected because they can all pass
+while a boundary such as > versus >= is wrong.
+
+### Failure case
+A mutation that no test catches. It would show a rule with no real test.
+
+### Evidence
+The mutation run changed a rule in evaluate.ts, money.ts or canonical.ts 16
+times, and each change made at least one test fail. One change (removing the
+range check in mulMinor) was caught only by the money tests, because the
+addition step also catches the overflow.
+
+### Explain it to a judge
+(To be written by the developer.)
+
+### Questions I still cannot answer
+- (To be written by the developer.)
+
+## Topic: Two evaluation points, and what the second one adds
+
+### Plain-language explanation
+The pre-check runs before PayPal is called and keeps funds from being held
+for an obvious violation. The final evaluation runs after PayPal has
+authorized. It repeats every pre-check rule at the new time, so a mandate
+revoked or expired in between is caught. It also compares what PayPal
+reported with what we expected: the amount against the total we computed, the
+currency, and the custom_id against the mandate's stored hash.
+
+### Where it appears in Ostensia
+packages/domain/src/evaluate.ts (finalEvaluatePurchase and the shared
+evaluate function) and observation.ts (the shape of what PayPal reported).
+
+### Why this design was selected
+The authorized amount is what PayPal will actually take, so it is checked
+against our own arithmetic rather than the proposal's claim (D-018).
+
+### Alternative
+Evaluating once, before the order. It was not selected because it cannot see
+what PayPal authorized, and a void would never be needed.
+
+### Failure case
+PayPal reports a different amount, or no custom_id. The decision is a block,
+and the payment-action rule then voids the authorization if it is CREATED.
+The custom_id check compares the echoed string with the stored hash only. It
+does not recompute the hash, so an edited stored mandate is a gate concern.
+
+### Evidence
+final-evaluate.test.ts, and the seeded comparison in
+evaluate-differential.test.ts (a matching observation allows exactly when
+the reference does; each of four changed observations blocks).
+
+### Explain it to a judge
+(To be written by the developer.)
+
+### Questions I still cannot answer
+- (To be written by the developer.)
+
+## Topic: Unknown means no write
+
+### Plain-language explanation
+PayPal reports three kinds of status as text. Each text is mapped to a
+neutral state by an exact, case-sensitive match. Anything unlisted becomes
+"unknown". The payment-action rule then allows a write in only two cases: a
+valid allow decision with an authorization that is exactly "created" (capture),
+and a valid block decision with the same state (void). A decision that is
+missing, malformed or a block with no listed violation, or any other state,
+gives no action.
+
+### Where it appears in Ostensia
+packages/domain/src/paypal-status.ts and payment-action.ts. The 24-case
+table test lives in payment-action.test.ts.
+
+### Why this design was selected
+A capture or a void cannot be undone. When the code does not understand an
+input, doing nothing is always recoverable: the authorization stays and
+expires on its own.
+
+### Alternative
+Voiding whenever the decision is not an allow. It was not selected because an
+unreadable decision is not evidence that the purchase was non-compliant.
+
+### Failure case
+A new PayPal status that is not in the lists. It maps to "unknown" and no
+write happens until the lists are extended with evidence (TD-005, E-1).
+
+### Evidence
+paypal-status.test.ts (near misses such as "created", " CREATED" and
+"constructor") and payment-action.test.ts. Removing the "created" check made
+24 tests fail.
+
+### Explain it to a judge
+(To be written by the developer.)
+
+### Questions I still cannot answer
+- (To be written by the developer.)
+
 ## Template for later entries
 
 ## Topic: [Concept]

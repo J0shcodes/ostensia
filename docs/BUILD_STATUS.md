@@ -2,30 +2,38 @@
 
 Compact status note. Read this first at the start of every session.
 
-Last updated: 2026-10-30
+Last updated: 2026-10-31
 
 ## Status
 
-- **Current increment:** Increment 1 — workspace and Fastify /health.
-  Implemented and verified; awaiting the walkthrough, comprehension
-  questions and commit authorization.
+- **Current increment:** Increment 2b — final evaluation, PayPal status
+  mappings and payment-action rule. Implemented and verified on branch
+  feat/01-domain-policy; awaiting the walkthrough, comprehension questions
+  and commit authorization.
 - **Passed:**
   - Repository audit (2026-10-29).
   - Directory rename, MIT license and decisions D-001 to D-005,
     committed in 5d426d5.
   - Increment 0 (documentation and decision records, D-006 to D-013),
     committed in 41632a4.
-  - Increment 1 checks (2026-10-30): pnpm test passes (3 files, 20 tests),
-    pnpm typecheck passes, GET /health returns 200 from a real node
-    process, invalid config exits with code 1 without echoing the value.
+  - Increment 1 (workspace and /health), committed in d916d84 and b2cd853
+    and merged to main through PR #1 (01afa89).
+  - Increment 2a (domain schemas, canonical hashing, pre-check evaluator),
+    committed in 4a4de58 and 2fd55f8 on feat/01-domain-policy. Checks: 257
+    tests, 16 of 16 deliberate rule mutations caught.
+  - Increment 2b checks (2026-10-31): pnpm test passes (15 files, 466
+    tests), pnpm typecheck passes, 18 of 18 deliberate rule mutations were
+    caught by at least one test, and GET /health returns 200 from a real
+    node process.
 - **Broken:** The spike runner (docs/evidence/spike/scripts/run-spike.js)
   points to countersign-spike.* files and a SPIKE_README.md that do not
   exist (TD-001). The application does not use it.
 - **Not yet existing (expected):** PayPal code, AI integration,
   persistence, the frontend.
-- **Next approved task:** None beyond Increment 1. Increment 2 needs its
-  own proposal and approval.
-- **Next comprehension gate:** Increment 1 walkthrough.
+- **Next approved task:** None. Increment 3 (PayPal adapter) needs a
+  separate approval, and E-1 is recommended first.
+- **Next comprehension gate:** Increment 2b walkthrough.
+- **Not pushed:** feat/01-domain-policy exists only locally.
 
 ## Evidence gates
 
@@ -48,8 +56,9 @@ Each increment needs separate approval.
 | # | Increment | Status |
 |---|---|---|
 | 0 | Documentation and decision records | Complete (41632a4) |
-| 1 | Workspace and Fastify /health | Implemented; awaiting walkthrough and commit |
-| 2 | Domain: schemas, canonical hash, evaluator, PayPal status mappings, payment-action rules | Not started |
+| 1 | Workspace and Fastify /health | Complete (d916d84, b2cd853; merged in 01afa89) |
+| 2a | Domain: schemas, canonical hash, pre-check evaluator, explanations | Complete (4a4de58, 2fd55f8) |
+| 2b | Domain: final evaluation, PayPal status mappings, payment-action rules | Implemented; awaiting walkthrough and commit |
 | 3 | PayPal adapter: token, create order, read order and authorization | Needs separate approval; E-1 recommended first |
 | 4 | Capture and void integration | Blocked by E-1 |
 | 5 | Gate service, store, routes | Not started |
