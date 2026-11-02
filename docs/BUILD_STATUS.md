@@ -6,10 +6,12 @@ Last updated: 2026-11-02
 
 ## Status
 
-- **Current increment:** None in progress. The E-1 evidence has been
-  reviewed (see Evidence gates). The Increment 3 proposal has not been
-  written. Work is on branch feat/03-paypal-adapter, created from main at
-  4484fc5.
+- **Current increment:** Increment 3 — PayPal adapter (token, vault check,
+  create order, read order and authorization). Complete on branch
+  feat/03-paypal-adapter (created from main at 4484fc5): code committed in
+  d98e76e, records in the docs commit that follows it. Not pushed or merged
+  yet. The automatic tests use a fake PayPal; the developer's smoke run
+  exercised the success path against the real sandbox (see below).
 - **Passed:**
   - Repository audit (2026-10-29).
   - Directory rename, MIT license and decisions D-001 to D-005,
@@ -26,15 +28,30 @@ Last updated: 2026-11-02
     in 15 files, typecheck clean, 18 of 18 deliberate rule mutations caught,
     and GET /health returns 200 from a real node process. Increment 2 was
     merged to main through PR #2 (4484fc5).
+  - E-1 evidence and D-019, committed in 6393471.
+  - Increment 3 checks (2026-11-02), all against a fake fetch built from the
+    E-1 response shapes with synthetic values (D-011): pnpm test passes (23
+    files, 723 tests), pnpm typecheck passes, 31 of 31 deliberate rule
+    mutations were caught, GET /health returns 200 from a real node
+    process, and the smoke script's configuration errors print only variable
+    names. Nothing was sent to PayPal.
 - **Broken:** The spike runner (docs/evidence/spike/scripts/run-spike.js)
   points to countersign-spike.* files and a SPIKE_README.md that do not
   exist (TD-001). The application does not use it.
-- **Not yet existing (expected):** PayPal code, AI integration,
-  persistence, the frontend.
-- **Next approved task:** None. The Increment 3 proposal is next, and
-  Increment 3 needs a separate approval.
-- **Next comprehension gate:** None open. The Increment 2b walkthrough was
-  completed.
+- **Not yet existing (expected):** capture and void code, the gate, routes
+  and store, AI integration, persistence, the frontend. The PayPal adapter
+  exists in apps/api/src/paypal/ but is not wired into the server.
+- **Sandbox smoke run (done 2026-11-02 by the developer):** the read-only
+  run and the `--create` run both passed on the success path; R1 is closed.
+  The sanitized report is in
+  docs/evidence/paypal-lifecycle/ADAPTER_SMOKE_RESULTS.md. The `--create`
+  run left one authorization in status CREATED, which the developer voids in
+  Postman (not recorded). Failure paths have not been exercised against
+  PayPal (TD-015).
+- **Next approved task:** None. Increment 4 needs a separate approval, and
+  E-1 stays open for it (R1 to R4).
+- **Next comprehension gate:** None open. The Increment 3 walkthrough was
+  done; the developer skipped the second set of re-check questions.
 
 ## Evidence gates
 
@@ -70,7 +87,7 @@ Each increment needs separate approval.
 | 1 | Workspace and Fastify /health | Complete (d916d84, b2cd853; merged in 01afa89) |
 | 2a | Domain: schemas, canonical hash, pre-check evaluator, explanations | Complete (4a4de58, 2fd55f8) |
 | 2b | Domain: final evaluation, PayPal status mappings, payment-action rules | Complete (d95cd6d, 6817a58; merged in 4484fc5) |
-| 3 | PayPal adapter: token, create order, read order and authorization | Proposal not yet written; needs separate approval. E-1 evidence reviewed. |
+| 3 | PayPal adapter: token, vault check, create order, read order and authorization | Complete (d98e76e and its docs commit); success path confirmed by the developer's sandbox smoke run; not yet merged |
 | 4 | Capture and void integration | E-1 stays open until R1 to R4 (TD-014) are recorded in this increment's sandbox run |
 | 5 | Gate service, store, routes | Not started |
 | 6 | AI mandate drafting | Not started; provider undecided |

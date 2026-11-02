@@ -238,8 +238,9 @@ Date identified: 2026-11-02
 Related increment: Increments 3 and 4
 Why it was deferred: None of them blocks the adapter proposal (D-019).
 Current limitation:
-- R1: the value of custom_id on GET authorization was not shared, so its
-  round-trip on that resource is not evidenced.
+- R1 (closed 2026-11-02): the value of custom_id on GET authorization was not
+  shared in E-1. The adapter smoke run then showed that it equals the hash
+  that was sent (docs/evidence/paypal-lifecycle/ADAPTER_SMOKE_RESULTS.md).
 - R2: the order COMPLETED and authorization CAPTURED statuses after capture
   are developer-reported, without an HTTP status.
 - R3: the field path of the captures count on the order was not recorded.
@@ -253,6 +254,50 @@ Proposed resolution: Record them in the Increment 4 sandbox run and update
 TD-005 and D-019.
 Review trigger: Increment 4.
 Status: Open
+
+## Item TD-015 — The adapter has only been tested against a fake PayPal
+
+Date identified: 2026-11-02
+Related increment: Increment 3
+Why it was deferred: Real sandbox calls need the developer's credentials and
+a manual run (D-011).
+Current limitation: apps/api/src/paypal/ is tested with a fake fetch whose
+responses follow the shapes E-1 recorded, with synthetic values. It has not
+yet made a real call. The fake can drift from real PayPal behaviour.
+Impact if left unresolved: A real response could differ from a fixture
+(for example in field names or status codes) and surface only in Increment 4
+or 5.
+Required evidence or dependency: The developer's smoke run
+(`pnpm --filter @ostensia/api smoke`, then with `--create`).
+Estimated future size: S
+Proposed resolution: Run the smoke script, record the sanitized output under
+docs/evidence/paypal-lifecycle/, and correct any fixture that differs.
+Review trigger: Before the Increment 4 proposal.
+Status: Partly resolved (2026-11-02). The smoke run exercised checkVault,
+createVaultOrder, getAuthorization and getOrder once against the sandbox, on
+the success path only, and every fixture field it touched matched. Failure
+paths, token expiry and the anomaly paths are still tested only against the
+fake.
+
+## Item TD-016 — No token refresh-and-retry, and no read retries
+
+Date identified: 2026-11-02
+Related increment: Increment 3
+Why it was deferred: Retrying hides the outcome the caller must see, and D-010
+forbids automatic write retries. Reads were left alone for the same
+simplicity.
+Current limitation: A 401 clears the cached token and returns "rejected". The
+failed call is not repeated, so one call is lost when a token expires early.
+Reads are not retried after a timeout.
+Impact if left unresolved: Occasional extra failures that the caller must
+handle by calling again.
+Required evidence or dependency: Observed token lifetimes (E-1 saw none) and
+how the gate wants to treat a failed read.
+Estimated future size: S
+Proposed resolution: Decide in Increment 5 whether the gate retries reads,
+and keep writes unretried.
+Review trigger: Increment 5.
+Status: Accepted for MVP
 
 ## Template for later entries
 
