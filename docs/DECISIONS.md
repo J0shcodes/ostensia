@@ -1028,6 +1028,96 @@ Increment 3 converts PayPal amount strings to minor units. Increment 5 wires
 the two evaluation points, recomputes the hash and passes the final decision
 to nextPaymentAction.
 
+## Decision D-019 — Adapter contract points taken from the E-1 evidence
+
+Date: 2026-11-02
+Status: Accepted (2026-11-02, by the developer)
+Related increment: Increments 3, 4, 5
+Related findings: docs/evidence/paypal-lifecycle/E1_RESULTS.md and its addendum; D-007, D-010
+Related risks: Writing on a misread state; double capture; treating a create response as the source of truth
+Related questions: The residuals listed below
+
+### Context
+E-1 ran the lifecycle in the sandbox on 2026-11-02. What was observed:
+- Create vault order: 201, order COMPLETED, authorization present in the
+  response with status CREATED. No /authorize call was used.
+- GET authorization: 200, CREATED, amount "72.00" USD, create_time and
+  expiration_time exactly 29 days apart, and a custom_id field.
+- Capture: 201, COMPLETED. Replay with the identical request id, body and
+  authorization: 200, same capture id. Order read shows one capture.
+- Void after capture: 422 PREVIOUSLY_CAPTURED.
+- Separate authorization: void returned 204 with an empty body, GET then
+  showed VOIDED, and a capture afterwards returned 422 AUTHORIZATION_VOIDED.
+- Developer-reported afterwards: order COMPLETED and authorization CAPTURED
+  after the capture.
+
+### Options considered
+1. Adopt the contract points below now.
+   - Benefits: Increment 3 can be proposed against real shapes.
+   - Costs/risks: a few points rest on developer-reported details.
+2. Wait for another sandbox run that records those details.
+   - Benefits: stronger evidence.
+   - Costs/risks: delays Increment 3 for details the Increment 4 smoke test
+     will also show.
+
+### Decision
+Option 1. The developer accepted every contract point below on 2026-11-02,
+and closed E-1 for the Increment 3 proposal only. R1 to R4 are to be recorded
+in the Increment 4 sandbox run; E-1 is not closed for Increment 4 until
+then. The contract points are:
+- The final evaluation's observed facts (amount, currency, custom_id) and the
+  authorization status and expiry come from GET authorization, not from the
+  create response.
+- The anomaly rule applies to any order status: an order with no
+  authorization performs no write. COMPLETED with a CREATED authorization is
+  the normal vault case.
+- The adapter builds URLs from its sandbox base URL and ids. It never follows
+  the hrefs in a response's links.
+- A void is recorded as voided only after a GET shows VOIDED. The 204 alone
+  is a request outcome. The adapter must not parse a body on a 204.
+- A repeated capture response (2xx, same capture id) is the same result, not
+  a second capture. D-010 stands: writes are not retried automatically, and
+  reconciliation reads the authorization (CAPTURED was reported after
+  capture).
+- 422 PREVIOUSLY_CAPTURED and 422 AUTHORIZATION_VOIDED are classified as
+  "already terminal, reconcile by reading". Any other error leaves the state
+  unknown and performs no write. Only the issue strings were recorded, so
+  the adapter must not rely on the rest of the error body.
+- Amounts are decimal strings with exactly two decimals ("72.00"). Anything
+  else is an invalid observation. The domain compares minor units (D-018).
+- A 404 RESOURCE_NOT_FOUND from the vault is a distinct "vault unavailable"
+  failure, and no order is created. The vault id in the environment is the
+  payment-token id, not the setup-token id, and .env.example will say so.
+
+### Rationale
+Each point follows an observed response or the rule that nothing unknown
+permits a write. No domain code changes: COMPLETED, CREATED, CAPTURED and
+VOIDED are already mapped (D-018).
+
+### Trade-offs
+- Residuals, none of which blocks the Increment 3 proposal:
+  - R1: the value of custom_id on GET authorization was not shared, so the
+    round-trip on that resource is not evidenced (the spike showed it on the
+    order).
+  - R2: the post-capture statuses are developer-reported, with no HTTP
+    status.
+  - R3: the field path of the captures count on the order was not recorded.
+  - R4: whether the earlier spike vault id is still valid was not tested.
+- Unobserved statuses are unchanged (TD-005).
+
+### Verification
+Increment 3: fixtures built only from sanitized real shapes, with tests for
+each point above. Increment 4: one real capture and one real void against the
+sandbox, recorded with identifiers sanitized.
+
+### Revisit trigger
+A sandbox response that contradicts E1_RESULTS.md, or a residual that turns
+out to matter.
+
+### Follow-up
+TD-014 tracks the residuals. They are recorded in the Increment 4 sandbox
+run, and the developer closes E-1 for Increment 4 after that.
+
 ## Template for later entries
 
 ### Decision D-NNN — [Title]

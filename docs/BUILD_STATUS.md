@@ -2,14 +2,14 @@
 
 Compact status note. Read this first at the start of every session.
 
-Last updated: 2026-10-31
+Last updated: 2026-11-02
 
 ## Status
 
-- **Current increment:** Increment 2b — final evaluation, PayPal status
-  mappings and payment-action rule. Implemented and verified on branch
-  feat/01-domain-policy; awaiting the walkthrough, comprehension questions
-  and commit authorization.
+- **Current increment:** None in progress. The E-1 evidence has been
+  reviewed (see Evidence gates). The Increment 3 proposal has not been
+  written. Work is on branch feat/03-paypal-adapter, created from main at
+  4484fc5.
 - **Passed:**
   - Repository audit (2026-10-29).
   - Directory rename, MIT license and decisions D-001 to D-005,
@@ -21,33 +21,44 @@ Last updated: 2026-10-31
   - Increment 2a (domain schemas, canonical hashing, pre-check evaluator),
     committed in 4a4de58 and 2fd55f8 on feat/01-domain-policy. Checks: 257
     tests, 16 of 16 deliberate rule mutations caught.
-  - Increment 2b checks (2026-10-31): pnpm test passes (15 files, 466
-    tests), pnpm typecheck passes, 18 of 18 deliberate rule mutations were
-    caught by at least one test, and GET /health returns 200 from a real
-    node process.
+  - Increment 2b (final evaluation, PayPal status mappings, payment-action
+    rule), committed in d95cd6d and 6817a58. Checks (2026-10-31): 466 tests
+    in 15 files, typecheck clean, 18 of 18 deliberate rule mutations caught,
+    and GET /health returns 200 from a real node process. Increment 2 was
+    merged to main through PR #2 (4484fc5).
 - **Broken:** The spike runner (docs/evidence/spike/scripts/run-spike.js)
   points to countersign-spike.* files and a SPIKE_README.md that do not
   exist (TD-001). The application does not use it.
 - **Not yet existing (expected):** PayPal code, AI integration,
   persistence, the frontend.
-- **Next approved task:** None. Increment 3 (PayPal adapter) needs a
-  separate approval, and E-1 is recommended first.
-- **Next comprehension gate:** Increment 2b walkthrough.
-- **Not pushed:** feat/01-domain-policy exists only locally.
+- **Next approved task:** None. The Increment 3 proposal is next, and
+  Increment 3 needs a separate approval.
+- **Next comprehension gate:** None open. The Increment 2b walkthrough was
+  completed.
 
 ## Evidence gates
 
-- **E-1, PayPal lifecycle (pending, run by the developer in Postman):**
-  record the following after a vault order:
-  - order status and authorization status;
-  - authorization expiration_time;
-  - capture status;
-  - result of replaying a capture with the same PayPal-Request-Id;
-  - void-after-capture refusal and capture-after-void refusal;
-  - whether the vault_id is still valid.
+- **E-1, PayPal lifecycle (run by the developer in Postman on 2026-11-02;
+  results in docs/evidence/paypal-lifecycle/E1_RESULTS.md).** Reviewed on
+  2026-11-02 against these criteria:
 
-  E-1 blocks capture and void integration. It does not block
-  Increments 1 and 2.
+  | Criterion | Result |
+  |---|---|
+  | Order status and authorization status | Observed: COMPLETED and CREATED |
+  | Authorization expiration_time | Observed: 29 days after create_time |
+  | Capture status | Observed: COMPLETED |
+  | Replay with the same PayPal-Request-Id | Observed: 200, same capture id, one capture |
+  | Void-after-capture refusal | Observed: 422 PREVIOUSLY_CAPTURED |
+  | Capture-after-void refusal | Observed: 422 AUTHORIZATION_VOIDED |
+  | Void and confirmation | Observed: 204, then GET shows VOIDED |
+  | Post-capture statuses | Developer-reported: order COMPLETED, authorization CAPTURED |
+  | Whether the vault_id is still valid | The 404 was an identifier mix-up (setup token used as vault id), per the developer. The earlier spike vault_id was not tested. |
+
+  The lifecycle conditions are met. The developer closed E-1 for the
+  Increment 3 proposal only (2026-11-02). Four residuals (R1 to R4 in
+  TD-014) are to be recorded in the Increment 4 sandbox run. E-1 stays open
+  for capture and void integration (Increment 4) until then. The adapter
+  contract points are in D-019 (Accepted).
 
 ## Increment roadmap
 
@@ -58,9 +69,9 @@ Each increment needs separate approval.
 | 0 | Documentation and decision records | Complete (41632a4) |
 | 1 | Workspace and Fastify /health | Complete (d916d84, b2cd853; merged in 01afa89) |
 | 2a | Domain: schemas, canonical hash, pre-check evaluator, explanations | Complete (4a4de58, 2fd55f8) |
-| 2b | Domain: final evaluation, PayPal status mappings, payment-action rules | Implemented; awaiting walkthrough and commit |
-| 3 | PayPal adapter: token, create order, read order and authorization | Needs separate approval; E-1 recommended first |
-| 4 | Capture and void integration | Blocked by E-1 |
+| 2b | Domain: final evaluation, PayPal status mappings, payment-action rules | Complete (d95cd6d, 6817a58; merged in 4484fc5) |
+| 3 | PayPal adapter: token, create order, read order and authorization | Proposal not yet written; needs separate approval. E-1 evidence reviewed. |
+| 4 | Capture and void integration | E-1 stays open until R1 to R4 (TD-014) are recorded in this increment's sandbox run |
 | 5 | Gate service, store, routes | Not started |
 | 6 | AI mandate drafting | Not started; provider undecided |
 | 7 | Next.js frontend | Not started |

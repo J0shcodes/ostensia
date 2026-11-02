@@ -31,7 +31,9 @@ dependency licenses have been reviewed (D-003).
 Impact if left unresolved: A credential or unlicensed content could be
 published.
 Required evidence or dependency: A manual review, following the checklist in
-docs/evidence/spike/README.md.
+docs/evidence/spike/README.md. This now includes
+docs/evidence/paypal-lifecycle/ostensia-e1.postman_collection.json, which had
+only a pattern scan on 2026-11-02 (no matches).
 Estimated future size: M
 Proposed resolution: Complete the manual review and a dependency license
 check.
@@ -65,7 +67,9 @@ Current limitation: PayPal's documentation recommends stored_credential
 (payment_initiator, usage, usage_pattern) for merchant-initiated payments
 with a vaulted token.
 Impact if left unresolved: PayPal might reject or risk-score these orders
-differently outside the tested sandbox path.
+differently outside the tested sandbox path. E-1 (2026-11-02) sent the same
+shape without stored_credential and got 201 with an authorization twice, so
+no rejection was seen in the sandbox.
 Required evidence or dependency: An independent sandbox test with
 stored_credential.
 Estimated future size: S
@@ -85,6 +89,10 @@ COMPLETED and PENDING were observed for captures in the spike tests. The
 mapping treats everything else as "unknown". Increment 2b implements exactly
 these lists in packages/domain/src/paypal-status.ts (D-018), plus order
 statuses APPROVED and COMPLETED.
+E-1 (2026-11-02) observed: authorization CREATED and VOIDED, capture
+COMPLETED, order COMPLETED. Authorization CAPTURED was reported by the
+developer afterwards. Still unobserved: authorization PARTIALLY_CAPTURED,
+PENDING, DENIED and EXPIRED; capture PENDING; order APPROVED.
 Impact if left unresolved: A valid status could be treated as "unknown"
 and block a legitimate action.
 Required evidence or dependency: E-1 results and the Payments v2 schema.
@@ -143,7 +151,10 @@ Why it was deferred: The spike showed that first-time vault setup needs
 manual buyer approval.
 Current limitation: The vault_id comes from the environment, created through
 the Postman vault flows. It is unknown whether the spike's vault_id is still
-valid.
+valid (E-1 did not test it). E-1's first vault check returned 404
+RESOURCE_NOT_FOUND because, per the developer, the setup-token id was used
+where the vault id (payment token) belongs; a vault created by re-running the
+setup then worked for both E-1 orders.
 Impact if left unresolved: A lapsed approval blocks the demo until the
 manual flow is repeated.
 Required evidence or dependency: E-1 confirms whether the vault_id is still
@@ -219,6 +230,28 @@ decision on whether the evaluator must be total.
 Estimated future size: S
 Proposed resolution: Test it, and either document or handle it.
 Review trigger: Increment 5 (gate), when input handling is wired up.
+Status: Open
+
+## Item TD-014 — E-1 residuals
+
+Date identified: 2026-11-02
+Related increment: Increments 3 and 4
+Why it was deferred: None of them blocks the adapter proposal (D-019).
+Current limitation:
+- R1: the value of custom_id on GET authorization was not shared, so its
+  round-trip on that resource is not evidenced.
+- R2: the order COMPLETED and authorization CAPTURED statuses after capture
+  are developer-reported, without an HTTP status.
+- R3: the field path of the captures count on the order was not recorded.
+- R4: whether the earlier spike vault_id is still valid was not tested.
+Impact if left unresolved: The adapter could read custom_id from the wrong
+place, or reconcile a capture on an unconfirmed status.
+Required evidence or dependency: The Increment 4 smoke test records a real
+authorization read after capture, with field names and statuses.
+Estimated future size: S
+Proposed resolution: Record them in the Increment 4 sandbox run and update
+TD-005 and D-019.
+Review trigger: Increment 4.
 Status: Open
 
 ## Template for later entries
