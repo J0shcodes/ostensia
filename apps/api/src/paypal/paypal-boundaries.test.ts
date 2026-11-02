@@ -3,9 +3,9 @@ import { describe, expect, it } from "vitest";
 
 // Boundary scan of the adapter source, like domain-purity.test.ts does for the
 // domain. It reads the production files only (not tests or test helpers) and
-// ignores comment lines. It guards what this increment promised: no authorize,
-// capture or void call, no stored_credential, only the sandbox host, and no
-// logging.
+// ignores comment lines. It guards what the adapter promises: no authorize,
+// reauthorize or refund call (capture and void are the only payment writes), no
+// stored_credential, only the sandbox host, and no logging.
 
 const DIRECTORY = new URL("./", import.meta.url);
 
@@ -37,7 +37,7 @@ describe("PayPal adapter source boundaries", () => {
   });
 
   it.each([
-    ["an authorize, capture or void path", /\/(authorize|capture|void)\b/],
+    ["an authorize, reauthorize or refund path", /\/(authorize|reauthorize|refund)\b/],
     ["stored_credential", /stored_credential/],
     ["a URL other than the sandbox host", /https?:\/\/(?!api-m\.sandbox\.paypal\.com)/],
     ["console output", /\bconsole\./],
@@ -57,6 +57,8 @@ describe("PayPal adapter source boundaries", () => {
       "/v2/checkout/orders",
       "/v2/checkout/orders/${id}",
       "/v2/payments/authorizations/${id}",
+      "/v2/payments/authorizations/${id}/capture",
+      "/v2/payments/authorizations/${id}/void",
       "/v3/vault/payment-tokens/${config.vaultId}",
     ]);
   });
