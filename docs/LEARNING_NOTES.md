@@ -428,6 +428,81 @@ paypal-status.test.ts (near misses such as "created", " CREATED" and
 ### Questions I still cannot answer
 - (To be written by the developer.)
 
+## Topic: Every outcome is a value, and "unknown" is not "failed"
+
+### Plain-language explanation
+Each adapter method returns a value for everything that can happen: a result,
+"nothing was sent" (no token), "PayPal said no" (a 4xx that means the request
+was not processed), or "unknown". Unknown covers a timeout, a network error,
+a 5xx, a 409 or 429, an unexpected status, and a 2xx we cannot read. For a
+create call, any of these may still mean PayPal created the order, so the
+adapter sends the request once and never retries. The caller settles the
+question by reading state.
+
+### Where it appears in Ostensia
+apps/api/src/paypal/adapter.ts (failureFrom and the result types) and
+http.ts (no_response). It will feed the gate in Increment 5.
+
+### Why this design was selected
+A thrown exception can be forgotten by a caller, and a retry can create a
+second order. A value that must be inspected cannot be skipped by accident.
+
+### Alternative
+Throwing errors, with a retry wrapper. It was not selected because it hides
+the difference between "not processed" and "maybe processed" (D-010).
+
+### Failure case
+Create returns a 500, or the connection drops. The result is unknown with the
+order id null, exactly one POST was sent, and the next step is to look for
+the order, not to post again.
+
+### Evidence
+adapter.test.ts: each failure class with a count of POST calls. Removing the
+409 or 5xx rule made tests fail (31 of 31 mutations caught).
+
+### Explain it to a judge
+(To be written by the developer.)
+
+### Questions I still cannot answer
+- (To be written by the developer.)
+
+## Topic: What a fake PayPal can and cannot prove
+
+### Plain-language explanation
+The adapter tests use a fake fetch that returns responses shaped like the E-1
+results, with invented values. That proves our code handles those shapes and
+every failure we thought of. It does not prove PayPal still returns those
+shapes. The mutation check also showed that a test suite can contain checks
+nothing can fail: two guards were redundant, so no input could tell the code
+with them from the code without them. One was removed, and the other was
+made reachable so a test could prove it.
+
+### Where it appears in Ostensia
+apps/api/src/paypal/test-support.ts (the fake and the fixtures), the smoke
+script apps/api/scripts/paypal-smoke.ts, and TD-015.
+
+### Why this design was selected
+Automatic tests must be fast and repeatable (D-011). The smoke script and the
+Increment 4 sandbox run keep the fake honest.
+
+### Alternative
+Calling the sandbox from the test suite. It was not selected because it needs
+credentials, is slow, and the first vault approval is manual.
+
+### Failure case
+PayPal renames a field. The fake still passes, and the smoke run shows the
+difference. That is why TD-015 stays open until the smoke script has run.
+
+### Evidence
+31 of 31 mutations caught after the cleanup. An unscripted request makes a
+test fail even if the adapter turns it into a harmless-looking result.
+
+### Explain it to a judge
+(To be written by the developer.)
+
+### Questions I still cannot answer
+- (To be written by the developer.)
+
 ## Template for later entries
 
 ## Topic: [Concept]

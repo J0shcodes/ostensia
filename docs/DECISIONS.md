@@ -1028,6 +1028,183 @@ Increment 3 converts PayPal amount strings to minor units. Increment 5 wires
 the two evaluation points, recomputes the hash and passes the final decision
 to nextPaymentAction.
 
+## Decision D-019 — Adapter contract points taken from the E-1 evidence
+
+Date: 2026-11-02
+Status: Accepted (2026-11-02, by the developer)
+Related increment: Increments 3, 4, 5
+Related findings: docs/evidence/paypal-lifecycle/E1_RESULTS.md and its addendum; D-007, D-010
+Related risks: Writing on a misread state; double capture; treating a create response as the source of truth
+Related questions: The residuals listed below
+
+### Context
+E-1 ran the lifecycle in the sandbox on 2026-11-02. What was observed:
+- Create vault order: 201, order COMPLETED, authorization present in the
+  response with status CREATED. No /authorize call was used.
+- GET authorization: 200, CREATED, amount "72.00" USD, create_time and
+  expiration_time exactly 29 days apart, and a custom_id field.
+- Capture: 201, COMPLETED. Replay with the identical request id, body and
+  authorization: 200, same capture id. Order read shows one capture.
+- Void after capture: 422 PREVIOUSLY_CAPTURED.
+- Separate authorization: void returned 204 with an empty body, GET then
+  showed VOIDED, and a capture afterwards returned 422 AUTHORIZATION_VOIDED.
+- Developer-reported afterwards: order COMPLETED and authorization CAPTURED
+  after the capture.
+
+### Options considered
+1. Adopt the contract points below now.
+   - Benefits: Increment 3 can be proposed against real shapes.
+   - Costs/risks: a few points rest on developer-reported details.
+2. Wait for another sandbox run that records those details.
+   - Benefits: stronger evidence.
+   - Costs/risks: delays Increment 3 for details the Increment 4 smoke test
+     will also show.
+
+### Decision
+Option 1. The developer accepted every contract point below on 2026-11-02,
+and closed E-1 for the Increment 3 proposal only. R1 to R4 are to be recorded
+in the Increment 4 sandbox run; E-1 is not closed for Increment 4 until
+then. The contract points are:
+- The final evaluation's observed facts (amount, currency, custom_id) and the
+  authorization status and expiry come from GET authorization, not from the
+  create response.
+- The anomaly rule applies to any order status: an order with no
+  authorization performs no write. COMPLETED with a CREATED authorization is
+  the normal vault case.
+- The adapter builds URLs from its sandbox base URL and ids. It never follows
+  the hrefs in a response's links.
+- A void is recorded as voided only after a GET shows VOIDED. The 204 alone
+  is a request outcome. The adapter must not parse a body on a 204.
+- A repeated capture response (2xx, same capture id) is the same result, not
+  a second capture. D-010 stands: writes are not retried automatically, and
+  reconciliation reads the authorization (CAPTURED was reported after
+  capture).
+- 422 PREVIOUSLY_CAPTURED and 422 AUTHORIZATION_VOIDED are classified as
+  "already terminal, reconcile by reading". Any other error leaves the state
+  unknown and performs no write. Only the issue strings were recorded, so
+  the adapter must not rely on the rest of the error body.
+- Amounts are decimal strings with exactly two decimals ("72.00"). Anything
+  else is an invalid observation. The domain compares minor units (D-018).
+- A 404 RESOURCE_NOT_FOUND from the vault is a distinct "vault unavailable"
+  failure, and no order is created. The vault id in the environment is the
+  payment-token id, not the setup-token id, and .env.example will say so.
+
+### Rationale
+Each point follows an observed response or the rule that nothing unknown
+permits a write. No domain code changes: COMPLETED, CREATED, CAPTURED and
+VOIDED are already mapped (D-018).
+
+### Trade-offs
+- Residuals, none of which blocks the Increment 3 proposal:
+  - R1 (closed 2026-11-02 by the adapter smoke run): the value of custom_id
+    on GET authorization was not shared, so the round-trip on that resource
+    was not evidenced (the spike showed it on the order).
+  - R2: the post-capture statuses are developer-reported, with no HTTP
+    status.
+  - R3: the field path of the captures count on the order was not recorded.
+  - R4: whether the earlier spike vault id is still valid was not tested.
+- Unobserved statuses are unchanged (TD-005).
+
+### Verification
+Increment 3: fixtures built only from sanitized real shapes, with tests for
+each point above. Increment 4: one real capture and one real void against the
+sandbox, recorded with identifiers sanitized.
+
+### Revisit trigger
+A sandbox response that contradicts E1_RESULTS.md, or a residual that turns
+out to matter.
+
+### Follow-up
+TD-014 tracks the residuals. They are recorded in the Increment 4 sandbox
+run, and the developer closes E-1 for Increment 4 after that.
+
+## Decision D-020 — PayPal adapter: validation, base URL, smoke run and outcome model
+
+Date: 2026-11-02
+Status: Accepted (2026-11-02, by the developer)
+Related increment: Increment 3
+Related findings: D-010, D-011, D-019; docs/evidence/paypal-lifecycle/
+Related risks: Writing on a misread response; credentials sent to another host; a retried write; secrets in logs; claiming the adapter works without a real run
+Related questions: R1 (custom_id on GET authorization)
+
+### Context
+Increment 3 builds the PayPal adapter that Increment 5's gate will call. D-010
+and D-019 fix its contract. Four choices were left open in the proposal.
+
+### Options considered
+1. How to validate PayPal responses.
+   - zod 4.6.7 in apps/api. Benefits: the exact version already in the
+     lockfile (no new download); the same tool as the domain.
+   - Hand-written checks. Benefits: no dependency. Costs: more code to review.
+   - Schemas in the domain. Costs: puts PayPal's wire format in the pure
+     package.
+2. The base URL.
+   - A code constant, and a ConfigError if PAYPAL_BASE_URL is set to anything
+     else.
+   - An environment variable validated to the sandbox value.
+3. The smoke run.
+   - Read-only plus one opt-in create, which can close R1.
+   - Read-only only.
+4. The timeout: 15 seconds, or another value.
+
+### Decision
+- Option 1A. zod 4.6.7 is added to apps/api. The lockfile changed by three
+  lines, a workspace link only.
+- Option 2A. The sandbox URL is a constant. Requests use only paths built
+  from ids restricted to letters, digits, hyphens and underscores, and the
+  resolved origin must equal the sandbox origin. Redirects are never followed
+  and response links are never followed.
+- Option 3A. apps/api/scripts/paypal-smoke.ts is run by the developer. It
+  creates an order only with --create, prints a sanitized report, and never
+  captures or voids.
+- Option 4: 15 seconds, set per call with AbortSignal.timeout.
+
+The outcome model, which every adapter method follows:
+- A value is returned for everything PayPal or the network can do. The only
+  throw is AdapterInputError, for arguments our own code got wrong.
+- not_sent: no token, so nothing reached the endpoint.
+- rejected: PayPal answered with a 4xx other than 408, 409 and 429. Only the
+  error name and issue strings are returned, clipped, never the message.
+- unknown: a timeout, a network error, 408, 409, 429, 5xx, an unexpected
+  status, or a 2xx that cannot be read. For the create call the order id is
+  returned when it is known.
+- A write is sent exactly once. Nothing is retried. A 401 invalidates the
+  cached token for the next call and does not repeat the failed one.
+- Create order keeps the E-1 request shape: intent AUTHORIZE, only
+  payment_source.paypal.vault_id, no stored_credential, no authorize call.
+- A 2xx without an authorization causes one re-read of the order. Still none
+  gives an anomaly. More than one authorization gives an anomaly, with no
+  guessing which to use.
+- The final evaluation's observed facts come from GET authorization (D-019).
+  An amount that is not exactly two decimals stays null and the evaluator
+  blocks with OBSERVATION_INVALID.
+
+### Rationale
+Every result is something the caller must look at, so a forgotten catch
+block cannot lead to a capture. The unknown outcomes keep the "a timeout is
+not a failure" rule from D-010.
+
+### Trade-offs
+- The adapter has not been run against the real sandbox. Its tests use a fake
+  built from the E-1 shapes (D-011). TD-015 records this.
+- There is no automatic token refresh-and-retry (TD-016).
+- checkVault reads only the status, because E-1 recorded nothing else.
+
+### Verification
+23 test files and 723 tests, including a request-shape test, every failure
+class with a count of POST calls, the amount parser, the sandbox guard, token
+caching, and a path from adapter output through the final evaluation to the
+payment-action rule. 31 of 31 deliberate mutations were caught. Two redundant
+guards that no test could distinguish were removed, and one unreachable check
+was made reachable and tested.
+
+### Revisit trigger
+The smoke run or the Increment 4 sandbox run contradicts a fixture shape.
+
+### Follow-up
+The developer runs the smoke script (R1). Increment 4 adds capture and void
+behind the same outcome model. Increment 5 wires the adapter into the gate.
+
 ## Template for later entries
 
 ### Decision D-NNN — [Title]

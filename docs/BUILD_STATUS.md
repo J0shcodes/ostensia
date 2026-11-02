@@ -2,14 +2,16 @@
 
 Compact status note. Read this first at the start of every session.
 
-Last updated: 2026-10-31
+Last updated: 2026-11-02
 
 ## Status
 
-- **Current increment:** Increment 2b — final evaluation, PayPal status
-  mappings and payment-action rule. Implemented and verified on branch
-  feat/01-domain-policy; awaiting the walkthrough, comprehension questions
-  and commit authorization.
+- **Current increment:** Increment 3 — PayPal adapter (token, vault check,
+  create order, read order and authorization). Complete on branch
+  feat/03-paypal-adapter (created from main at 4484fc5): code committed in
+  d98e76e, records in the docs commit that follows it. Not pushed or merged
+  yet. The automatic tests use a fake PayPal; the developer's smoke run
+  exercised the success path against the real sandbox (see below).
 - **Passed:**
   - Repository audit (2026-10-29).
   - Directory rename, MIT license and decisions D-001 to D-005,
@@ -21,33 +23,59 @@ Last updated: 2026-10-31
   - Increment 2a (domain schemas, canonical hashing, pre-check evaluator),
     committed in 4a4de58 and 2fd55f8 on feat/01-domain-policy. Checks: 257
     tests, 16 of 16 deliberate rule mutations caught.
-  - Increment 2b checks (2026-10-31): pnpm test passes (15 files, 466
-    tests), pnpm typecheck passes, 18 of 18 deliberate rule mutations were
-    caught by at least one test, and GET /health returns 200 from a real
-    node process.
+  - Increment 2b (final evaluation, PayPal status mappings, payment-action
+    rule), committed in d95cd6d and 6817a58. Checks (2026-10-31): 466 tests
+    in 15 files, typecheck clean, 18 of 18 deliberate rule mutations caught,
+    and GET /health returns 200 from a real node process. Increment 2 was
+    merged to main through PR #2 (4484fc5).
+  - E-1 evidence and D-019, committed in 6393471.
+  - Increment 3 checks (2026-11-02), all against a fake fetch built from the
+    E-1 response shapes with synthetic values (D-011): pnpm test passes (23
+    files, 723 tests), pnpm typecheck passes, 31 of 31 deliberate rule
+    mutations were caught, GET /health returns 200 from a real node
+    process, and the smoke script's configuration errors print only variable
+    names. Nothing was sent to PayPal.
 - **Broken:** The spike runner (docs/evidence/spike/scripts/run-spike.js)
   points to countersign-spike.* files and a SPIKE_README.md that do not
   exist (TD-001). The application does not use it.
-- **Not yet existing (expected):** PayPal code, AI integration,
-  persistence, the frontend.
-- **Next approved task:** None. Increment 3 (PayPal adapter) needs a
-  separate approval, and E-1 is recommended first.
-- **Next comprehension gate:** Increment 2b walkthrough.
-- **Not pushed:** feat/01-domain-policy exists only locally.
+- **Not yet existing (expected):** capture and void code, the gate, routes
+  and store, AI integration, persistence, the frontend. The PayPal adapter
+  exists in apps/api/src/paypal/ but is not wired into the server.
+- **Sandbox smoke run (done 2026-11-02 by the developer):** the read-only
+  run and the `--create` run both passed on the success path; R1 is closed.
+  The sanitized report is in
+  docs/evidence/paypal-lifecycle/ADAPTER_SMOKE_RESULTS.md. The `--create`
+  run left one authorization in status CREATED, which the developer voids in
+  Postman (not recorded). Failure paths have not been exercised against
+  PayPal (TD-015).
+- **Next approved task:** None. Increment 4 needs a separate approval, and
+  E-1 stays open for it (R1 to R4).
+- **Next comprehension gate:** None open. The Increment 3 walkthrough was
+  done; the developer skipped the second set of re-check questions.
 
 ## Evidence gates
 
-- **E-1, PayPal lifecycle (pending, run by the developer in Postman):**
-  record the following after a vault order:
-  - order status and authorization status;
-  - authorization expiration_time;
-  - capture status;
-  - result of replaying a capture with the same PayPal-Request-Id;
-  - void-after-capture refusal and capture-after-void refusal;
-  - whether the vault_id is still valid.
+- **E-1, PayPal lifecycle (run by the developer in Postman on 2026-11-02;
+  results in docs/evidence/paypal-lifecycle/E1_RESULTS.md).** Reviewed on
+  2026-11-02 against these criteria:
 
-  E-1 blocks capture and void integration. It does not block
-  Increments 1 and 2.
+  | Criterion | Result |
+  |---|---|
+  | Order status and authorization status | Observed: COMPLETED and CREATED |
+  | Authorization expiration_time | Observed: 29 days after create_time |
+  | Capture status | Observed: COMPLETED |
+  | Replay with the same PayPal-Request-Id | Observed: 200, same capture id, one capture |
+  | Void-after-capture refusal | Observed: 422 PREVIOUSLY_CAPTURED |
+  | Capture-after-void refusal | Observed: 422 AUTHORIZATION_VOIDED |
+  | Void and confirmation | Observed: 204, then GET shows VOIDED |
+  | Post-capture statuses | Developer-reported: order COMPLETED, authorization CAPTURED |
+  | Whether the vault_id is still valid | The 404 was an identifier mix-up (setup token used as vault id), per the developer. The earlier spike vault_id was not tested. |
+
+  The lifecycle conditions are met. The developer closed E-1 for the
+  Increment 3 proposal only (2026-11-02). Four residuals (R1 to R4 in
+  TD-014) are to be recorded in the Increment 4 sandbox run. E-1 stays open
+  for capture and void integration (Increment 4) until then. The adapter
+  contract points are in D-019 (Accepted).
 
 ## Increment roadmap
 
@@ -58,9 +86,9 @@ Each increment needs separate approval.
 | 0 | Documentation and decision records | Complete (41632a4) |
 | 1 | Workspace and Fastify /health | Complete (d916d84, b2cd853; merged in 01afa89) |
 | 2a | Domain: schemas, canonical hash, pre-check evaluator, explanations | Complete (4a4de58, 2fd55f8) |
-| 2b | Domain: final evaluation, PayPal status mappings, payment-action rules | Implemented; awaiting walkthrough and commit |
-| 3 | PayPal adapter: token, create order, read order and authorization | Needs separate approval; E-1 recommended first |
-| 4 | Capture and void integration | Blocked by E-1 |
+| 2b | Domain: final evaluation, PayPal status mappings, payment-action rules | Complete (d95cd6d, 6817a58; merged in 4484fc5) |
+| 3 | PayPal adapter: token, vault check, create order, read order and authorization | Complete (d98e76e and its docs commit); success path confirmed by the developer's sandbox smoke run; not yet merged |
+| 4 | Capture and void integration | E-1 stays open until R1 to R4 (TD-014) are recorded in this increment's sandbox run |
 | 5 | Gate service, store, routes | Not started |
 | 6 | AI mandate drafting | Not started; provider undecided |
 | 7 | Next.js frontend | Not started |
