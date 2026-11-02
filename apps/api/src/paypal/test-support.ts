@@ -14,6 +14,7 @@ export const SYNTH = {
   vaultId: "SYNTH-VAULT-1",
   orderId: "SYNTH-ORDER-1",
   authorizationId: "SYNTH-AUTH-1",
+  captureId: "SYNTH-CAPTURE-1",
   mandateHash: "a".repeat(64),
 } as const;
 
@@ -51,15 +52,35 @@ export function tokenBody(expiresIn = 32400): unknown {
 type OrderAuthorization = { id: string; status: string };
 
 export function orderBody(
-  options: { id?: string; status?: string; authorizations?: OrderAuthorization[] } = {},
+  options: {
+    id?: string;
+    status?: string;
+    authorizations?: OrderAuthorization[];
+    captures?: OrderAuthorization[];
+  } = {},
 ): unknown {
   const authorizations = options.authorizations ?? [{ id: SYNTH.authorizationId, status: "CREATED" }];
+  const captures = options.captures ?? [];
+  const payments = {
+    ...(authorizations.length > 0 ? { authorizations } : {}),
+    ...(captures.length > 0 ? { captures } : {}),
+  };
   return {
     id: options.id ?? SYNTH.orderId,
     status: options.status ?? "COMPLETED",
-    purchase_units: [
-      { reference_id: "attempt-1", payments: authorizations.length > 0 ? { authorizations } : {} },
-    ],
+    purchase_units: [{ reference_id: "attempt-1", payments }],
+  };
+}
+
+// Shape of the E-1 capture response (request E1-C.4): id, status, amount and
+// final_capture were the logged fields.
+export function captureBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: SYNTH.captureId,
+    status: "COMPLETED",
+    amount: { currency_code: "USD", value: "72.00" },
+    final_capture: true,
+    ...overrides,
   };
 }
 

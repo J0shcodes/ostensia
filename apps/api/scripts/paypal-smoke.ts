@@ -1,28 +1,28 @@
-// Manual sandbox smoke run, started by the developer: pnpm --filter @ostensia/api smoke
+// Manual sandbox smoke run, started by the developer:
 //
-// Read-only by default: it gets a token and checks the vault. With --create it
-// also creates ONE vault order, reads the authorization back and prints what it
-// saw. That leaves one authorization in status CREATED in the sandbox; void it in
-// Postman (this increment has no void). It never captures.
+//   pnpm --filter @ostensia/api smoke              read-only: token and vault check
+//   pnpm --filter @ostensia/api smoke --lifecycle  also runs the capture and void paths
 //
-// The output is a sanitized report: statuses, kinds and yes/no answers only. No
-// ids, tokens or secrets are printed.
-import { createHash } from "node:crypto";
+// --lifecycle creates two sandbox orders and moves $1.00 of sandbox money once
+// (one capture). Every order it creates is captured or voided before it ends, so
+// no authorization is left open. The output is a sanitized report: statuses,
+// kinds and yes/no answers only, no ids, tokens or secrets. See lifecycle.ts.
 import { ConfigError } from "../src/config.ts";
-import { createPayPalAdapter, toObservedPayment } from "../src/paypal/adapter.ts";
-import type { Failure } from "../src/paypal/adapter.ts";
+import { createPayPalAdapter } from "../src/paypal/adapter.ts";
 import { loadPayPalConfig } from "../src/paypal/paypal-config.ts";
+import { describeFailure, runLifecycle } from "./lifecycle.ts";
 
-function describeFailure(failure: Failure): string {
-  switch (failure.kind) {
-    case "not_sent":
-      return `nothing was sent (token ${failure.tokenFailure})`;
-    case "rejected":
-      return `rejected: status ${failure.error.status}, error ${failure.error.errorName ?? "none"}, issues [${failure.error.issues.join(", ")}], debug id ${failure.error.debugId ?? "none"}`;
-    case "unknown":
-      return `outcome unknown: ${failure.reason}, status ${failure.status ?? "none"}, debug id ${failure.debugId ?? "none"}`;
-  }
+const flags = process.argv.slice(2);
+if (flags.includes("--create")) {
+  console.error("--create was replaced by --lifecycle, which also captures or voids everything it creates.");
+  process.exit(1);
 }
+const unknownFlag = flags.find((flag) => flag !== "--lifecycle");
+if (unknownFlag !== undefined) {
+  console.error("Unknown option. The only option is --lifecycle.");
+  process.exit(1);
+}
+const wantLifecycle = flags.includes("--lifecycle");
 
 let config;
 try {
@@ -36,70 +36,29 @@ try {
 }
 
 const adapter = createPayPalAdapter({ config, fetch });
-const wantCreate = process.argv.includes("--create");
 let ok = true;
 
 console.log("PayPal sandbox smoke run (sanitized)");
 
 const vault = await adapter.checkVault();
 if (vault.kind === "ok") {
-  console.log("1. vault check: ok");
+  console.log("VAULT: ok");
 } else {
   ok = false;
-  console.log(`1. vault check: ${vault.kind === "vault_unavailable" ? "vault_unavailable (404 RESOURCE_NOT_FOUND)" : describeFailure(vault)}`);
+  console.log(
+    `VAULT: ${vault.kind === "vault_unavailable" ? "vault_unavailable (404 RESOURCE_NOT_FOUND)" : describeFailure(vault)}`,
+  );
 }
 
-if (!wantCreate) {
-  console.log("2. create order: skipped (pass --create to create one sandbox authorization)");
+if (!wantLifecycle) {
+  console.log("LIFECYCLE: skipped (pass --lifecycle to run the capture and void paths; it moves $1.00 of sandbox money once)");
 } else if (!ok) {
-  console.log("2. create order: skipped because the vault check did not pass");
+  console.log("LIFECYCLE: skipped because the vault check did not pass");
 } else {
-  const attemptId = `smoke-${Date.now()}`;
-  const mandateHash = createHash("sha256").update(`ostensia-smoke:${attemptId}`, "utf8").digest("hex");
-  const created = await adapter.createVaultOrder({ attemptId, amountMinor: 100, mandateHash });
-
-  if (created.kind !== "created") {
-    ok = false;
-    console.log(
-      created.kind === "anomaly"
-        ? `2. create order: anomaly (${created.reason}), order status ${created.order.statusRaw}`
-        : `2. create order: ${describeFailure(created)}`,
-    );
-  } else {
-    console.log(
-      `2. create order: created; order status ${created.order.statusRaw} (${created.order.state}); authorizations in response: ${created.order.authorizations.length}`,
-    );
-
-    const read = await adapter.getAuthorization(created.authorizationId);
-    if (read.kind !== "ok") {
-      ok = false;
-      console.log(`3. get authorization: ${read.kind === "not_found" ? "not found" : describeFailure(read)}`);
-    } else {
-      const a = read.authorization;
-      const observed = toObservedPayment(a);
-      const days =
-        a.expirationTime !== null && a.createTime !== null
-          ? (Date.parse(a.expirationTime) - Date.parse(a.createTime)) / 86_400_000
-          : null;
-      console.log("3. get authorization:");
-      console.log(`   status: ${a.statusRaw} (${a.state})`);
-      console.log(`   amount in minor units: ${observed.amountMinor ?? "unreadable"}, currency: ${observed.currency}`);
-      console.log(`   custom_id present: ${a.customId !== null}; equals the hash that was sent (R1): ${a.customId === mandateHash}`);
-      console.log(`   order id present: ${a.orderId !== null}; expiration present: ${a.expirationTime !== null}; days from create to expiry: ${days ?? "unknown"}`);
-      if (a.customId !== mandateHash) ok = false;
-    }
-
-    const order = await adapter.getOrder(created.order.orderId);
-    if (order.kind !== "ok") {
-      ok = false;
-      console.log(`4. get order: ${order.kind === "not_found" ? "not found" : describeFailure(order)}`);
-    } else {
-      console.log(
-        `4. get order: status ${order.order.statusRaw} (${order.order.state}); authorizations: ${order.order.authorizations.map((x) => `${x.statusRaw} (${x.state})`).join(", ") || "none"}`,
-      );
-    }
-    console.log("NOTE: one sandbox authorization is still CREATED. Void it in Postman. This script never captures or voids.");
-  }
+  console.log("LIFECYCLE: running (two sandbox orders; one $1.00 capture)");
+  const report = await runLifecycle(adapter, { runId: String(Date.now()) });
+  for (const line of report.lines) console.log(line);
+  ok = report.ok;
 }
 
 console.log(ok ? "RESULT: all steps that ran passed" : "RESULT: at least one step did not pass (see above)");

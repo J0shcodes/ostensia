@@ -103,6 +103,7 @@ describe("createVaultOrder: an authorization is present", () => {
         statusRaw: "COMPLETED",
         state: "completed",
         authorizations: [{ id: SYNTH.authorizationId, statusRaw: "CREATED", state: "created" }],
+        captures: [],
       },
     });
     expect(fake.callsTo("GET", ORDER)).toHaveLength(0);
@@ -348,6 +349,7 @@ describe("getOrder", () => {
         statusRaw: "COMPLETED",
         state: "completed",
         authorizations: [{ id: SYNTH.authorizationId, statusRaw: "CREATED", state: "created" }],
+        captures: [],
       },
     });
     expect(fake.callsTo("GET", ORDER)[0]?.url).toBe("https://api-m.sandbox.paypal.com/v2/checkout/orders/SYNTH-ORDER-1");

@@ -1,5 +1,5 @@
-import { IdentifierSchema, mapAuthorizationStatus, mapOrderStatus } from "@ostensia/domain";
-import type { AuthorizationState, OrderState } from "@ostensia/domain";
+import { IdentifierSchema, mapAuthorizationStatus, mapCaptureStatus, mapOrderStatus } from "@ostensia/domain";
+import type { AuthorizationState, CaptureState, OrderState } from "@ostensia/domain";
 import { formatPayPalAmount, parsePayPalUsdAmount } from "./amount.ts";
 import { paypalFetch } from "./http.ts";
 import type { FetchFn, HttpOutcome } from "./http.ts";
@@ -7,17 +7,19 @@ import type { PayPalConfig } from "./paypal-config.ts";
 import { requestIdFor } from "./request-id.ts";
 import {
   AuthorizationResponseSchema,
+  CaptureResponseSchema,
   ErrorResponseSchema,
   OrderResponseSchema,
   PAYPAL_ID,
 } from "./responses.ts";
-import type { AuthorizationResponse, OrderResponse } from "./responses.ts";
+import type { AuthorizationResponse, CaptureResponse, OrderResponse } from "./responses.ts";
 import { createTokenProvider } from "./token.ts";
 import type { TokenFailure } from "./token.ts";
 
-// The PayPal adapter (D-010, D-019). It has no authorize, capture or void
-// method: those are not part of this increment, and an order created from a
-// vault id is already authorized.
+// The PayPal adapter (D-010, D-019, D-021). It has no authorize method: an
+// order created from a vault id is already authorized. The two payment writes,
+// captureAuthorization and voidAuthorization, only send a request. Deciding to
+// call them is the gate's job (nextPaymentAction), not the adapter's.
 //
 // Every method returns a value for everything PayPal or the network can do. It
 // throws only AdapterInputError, for arguments our own code got wrong. Nothing
@@ -55,7 +57,8 @@ export type UnknownReason =
   | "rate_limited"
   | "unreadable_response"
   | "unexpected_status"
-  | "authorization_unconfirmed";
+  | "authorization_unconfirmed"
+  | "void_unconfirmed";
 
 // The outcome cannot be told from what we received. For a write, the operation
 // may or may not have happened.
@@ -74,11 +77,20 @@ export type AuthorizationRef = {
   readonly state: AuthorizationState;
 };
 
+export type CaptureRef = {
+  readonly id: string;
+  readonly statusRaw: string;
+  readonly state: CaptureState;
+};
+
 export type OrderSnapshot = {
   readonly orderId: string;
   readonly statusRaw: string;
   readonly state: OrderState;
   readonly authorizations: readonly AuthorizationRef[];
+  // Read from purchase_units[].payments.captures (E-1, request E1-C.6). After a
+  // capture whose outcome is unknown, this is where its id can be found.
+  readonly captures: readonly CaptureRef[];
 };
 
 export type AuthorizationSnapshot = {
@@ -122,11 +134,49 @@ export type CreateVaultOrderInput = {
   readonly mandateHash: string;
 };
 
+export type CaptureSnapshot = {
+  readonly captureId: string;
+  readonly statusRaw: string;
+  readonly state: CaptureState;
+  readonly amountMinor: number | null;
+  readonly currency: string | null;
+};
+
+// The two refusals E-1 recorded for a write on an authorization that has
+// already reached an end state: capture after capture or void after capture
+// (PREVIOUSLY_CAPTURED), and capture after void (AUTHORIZATION_VOIDED). Both mean
+// "settled already, read the state to see which" (D-019).
+export type TerminalIssue = "PREVIOUSLY_CAPTURED" | "AUTHORIZATION_VOIDED";
+
+export type AlreadyTerminal = {
+  readonly kind: "already_terminal";
+  readonly issue: TerminalIssue;
+  readonly status: number;
+  readonly debugId: string | null;
+};
+
+// "accepted" means PayPal returned a capture. Money has moved only when the
+// capture state is "completed"; "pending" and "unknown" are not completion.
+export type CaptureResult =
+  | { readonly kind: "accepted"; readonly capture: CaptureSnapshot }
+  | AlreadyTerminal
+  | Failure;
+
+// "voided" is returned only after a GET showed the authorization as VOIDED (D-019).
+export type VoidResult = { readonly kind: "voided" } | AlreadyTerminal | Failure;
+
+export type AuthorizationWriteInput = {
+  readonly attemptId: string;
+  readonly authorizationId: string;
+};
+
 export type PayPalAdapter = {
   checkVault(): Promise<VaultCheckResult>;
   createVaultOrder(input: CreateVaultOrderInput): Promise<CreateOrderResult>;
   getOrder(orderId: string): Promise<GetOrderResult>;
   getAuthorization(authorizationId: string): Promise<GetAuthorizationResult>;
+  captureAuthorization(input: AuthorizationWriteInput): Promise<CaptureResult>;
+  voidAuthorization(input: AuthorizationWriteInput): Promise<VoidResult>;
 };
 
 export type PayPalAdapterOptions = {
@@ -148,6 +198,7 @@ const MAX_ISSUE_LENGTH = 64;
 
 function orderSnapshot(order: OrderResponse): OrderSnapshot {
   const authorizations = (order.purchase_units ?? []).flatMap((unit) => unit.payments?.authorizations ?? []);
+  const captures = (order.purchase_units ?? []).flatMap((unit) => unit.payments?.captures ?? []);
   return {
     orderId: order.id,
     statusRaw: order.status,
@@ -157,6 +208,21 @@ function orderSnapshot(order: OrderResponse): OrderSnapshot {
       statusRaw: authorization.status,
       state: mapAuthorizationStatus(authorization.status),
     })),
+    captures: captures.map((capture) => ({
+      id: capture.id,
+      statusRaw: capture.status,
+      state: mapCaptureStatus(capture.status),
+    })),
+  };
+}
+
+function captureSnapshot(capture: CaptureResponse): CaptureSnapshot {
+  return {
+    captureId: capture.id,
+    statusRaw: capture.status,
+    state: mapCaptureStatus(capture.status),
+    amountMinor: capture.amount === undefined ? null : parsePayPalUsdAmount(capture.amount.value),
+    currency: capture.amount?.currency_code ?? null,
   };
 }
 
@@ -225,6 +291,29 @@ function failureFrom(outcome: HttpOutcome): Rejected | Unknown {
   if (status >= 500) return unknownResult("server_error", status, debugId);
   if (status >= 400) return rejectedFrom(outcome);
   return unknownResult("unexpected_status", status, debugId);
+}
+
+const TERMINAL_ISSUES: readonly TerminalIssue[] = ["PREVIOUSLY_CAPTURED", "AUTHORIZATION_VOIDED"];
+
+// For the two payment writes. A 422 whose issue is one of the two refusals E-1
+// recorded means the authorization is already settled; everything else is
+// classified as for any other call.
+function writeFailureFrom(outcome: HttpOutcome): AlreadyTerminal | Rejected | Unknown {
+  const failure = failureFrom(outcome);
+  if (failure.kind === "rejected" && failure.error.status === 422) {
+    const issue = TERMINAL_ISSUES.find((candidate) => failure.error.issues.includes(candidate));
+    if (issue !== undefined) {
+      return { kind: "already_terminal", issue, status: failure.error.status, debugId: failure.error.debugId };
+    }
+  }
+  return failure;
+}
+
+function requireAttemptId(value: string): string {
+  if (!IdentifierSchema.safeParse(value).success || value.length > MAX_ATTEMPT_ID_LENGTH) {
+    throw new AdapterInputError("attemptId is not a valid attempt id.");
+  }
+  return value;
 }
 
 // ----- The adapter -----
@@ -359,9 +448,7 @@ export function createPayPalAdapter(options: PayPalAdapterOptions): PayPalAdapte
   }
 
   async function createVaultOrder(input: CreateVaultOrderInput): Promise<CreateOrderResult> {
-    if (!IdentifierSchema.safeParse(input.attemptId).success || input.attemptId.length > MAX_ATTEMPT_ID_LENGTH) {
-      throw new AdapterInputError("attemptId is not a valid attempt id.");
-    }
+    requireAttemptId(input.attemptId);
     const amount = input.amountMinor >= 1 ? formatPayPalAmount(input.amountMinor) : null;
     if (amount === null) throw new AdapterInputError("amountMinor must be a positive safe integer.");
     if (!MANDATE_HASH.test(input.mandateHash)) throw new AdapterInputError("mandateHash is not a SHA-256 hex string.");
@@ -389,5 +476,56 @@ export function createPayPalAdapter(options: PayPalAdapterOptions): PayPalAdapte
     return failure.kind === "unknown" ? { ...failure, orderId: null } : failure;
   }
 
-  return { checkVault, createVaultOrder, getOrder, getAuthorization };
+  // The E-1 capture request (E1-C.4): a full capture with no amount, which the
+  // final evaluation has already compared with the authorization. Sent once.
+  async function captureAuthorization(input: AuthorizationWriteInput): Promise<CaptureResult> {
+    const attemptId = requireAttemptId(input.attemptId);
+    const id = requirePayPalId(input.authorizationId, "authorizationId");
+
+    const outcome = await authorizedCall("POST", `/v2/payments/authorizations/${id}/capture`, {
+      headers: {
+        "Content-Type": "application/json",
+        "PayPal-Request-Id": requestIdFor(attemptId, "capture"),
+        Prefer: "return=representation",
+      },
+      body: JSON.stringify({ final_capture: true }),
+    });
+    if (outcome.kind === "not_sent") return outcome;
+
+    // E-1: 201 for the capture, and 200 with the same capture id for a replay.
+    if (outcome.kind === "response" && (outcome.status === 200 || outcome.status === 201)) {
+      const parsed = outcome.body.kind === "json" ? CaptureResponseSchema.safeParse(outcome.body.value) : null;
+      if (parsed === null || !parsed.success) {
+        // PayPal said yes but we cannot read the capture, so money may have moved.
+        return unknownResult("unreadable_response", outcome.status, outcome.debugId);
+      }
+      return { kind: "accepted", capture: captureSnapshot(parsed.data) };
+    }
+    return writeFailureFrom(outcome);
+  }
+
+  // The E-1 void request (E1-C.7, E1-V.3): an empty JSON body. PayPal answers
+  // 204 with no body, so success is confirmed by one GET (D-019).
+  async function voidAuthorization(input: AuthorizationWriteInput): Promise<VoidResult> {
+    const attemptId = requireAttemptId(input.attemptId);
+    const id = requirePayPalId(input.authorizationId, "authorizationId");
+
+    const outcome = await authorizedCall("POST", `/v2/payments/authorizations/${id}/void`, {
+      headers: {
+        "Content-Type": "application/json",
+        "PayPal-Request-Id": requestIdFor(attemptId, "void"),
+      },
+      body: "{}",
+    });
+    if (outcome.kind === "not_sent") return outcome;
+
+    if (outcome.kind === "response" && (outcome.status === 204 || outcome.status === 200)) {
+      const read = await getAuthorization(id);
+      if (read.kind === "ok" && read.authorization.state === "voided") return { kind: "voided" };
+      return unknownResult("void_unconfirmed", outcome.status, outcome.debugId);
+    }
+    return writeFailureFrom(outcome);
+  }
+
+  return { checkVault, createVaultOrder, getOrder, getAuthorization, captureAuthorization, voidAuthorization };
 }

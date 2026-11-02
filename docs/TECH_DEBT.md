@@ -91,7 +91,8 @@ these lists in packages/domain/src/paypal-status.ts (D-018), plus order
 statuses APPROVED and COMPLETED.
 E-1 (2026-11-02) observed: authorization CREATED and VOIDED, capture
 COMPLETED, order COMPLETED. Authorization CAPTURED was reported by the
-developer afterwards. Still unobserved: authorization PARTIALLY_CAPTURED,
+developer afterwards and then read through the adapter in the Increment 4
+lifecycle run (2026-11-02). Still unobserved: authorization PARTIALLY_CAPTURED,
 PENDING, DENIED and EXPIRED; capture PENDING; order APPROVED.
 Impact if left unresolved: A valid status could be treated as "unknown"
 and block a legitimate action.
@@ -241,19 +242,24 @@ Current limitation:
 - R1 (closed 2026-11-02): the value of custom_id on GET authorization was not
   shared in E-1. The adapter smoke run then showed that it equals the hash
   that was sent (docs/evidence/paypal-lifecycle/ADAPTER_SMOKE_RESULTS.md).
-- R2: the order COMPLETED and authorization CAPTURED statuses after capture
-  are developer-reported, without an HTTP status.
-- R3: the field path of the captures count on the order was not recorded.
-- R4: whether the earlier spike vault_id is still valid was not tested.
-Impact if left unresolved: The adapter could read custom_id from the wrong
-place, or reconcile a capture on an unconfirmed status.
-Required evidence or dependency: The Increment 4 smoke test records a real
-authorization read after capture, with field names and statuses.
+- R2 (closed 2026-11-02): the order COMPLETED and authorization CAPTURED
+  statuses after capture were developer-reported in E-1. The Increment 4
+  lifecycle run read CAPTURED through the adapter (PASS, D-021).
+- R3 (closed 2026-11-02): request E1-C.6 in the E-1 collection counts captures
+  at purchase_units[].payments.captures on GET order. The lifecycle run read
+  exactly one COMPLETED capture from that path after the replay (PASS).
+- R4 (closed as not needed, 2026-11-02, D-021): whether the earlier spike
+  vault_id is still valid was not tested. The application uses the configured
+  vault id, and checkVault reports a bad one.
+Impact if left unresolved: The adapter could reconcile a capture on an
+unconfirmed status or read the capture list from the wrong place.
+Required evidence or dependency: The developer's `smoke --lifecycle` run,
+recorded under docs/evidence/paypal-lifecycle/LIFECYCLE_SMOKE_RESULTS.md
+(done 2026-11-02).
 Estimated future size: S
-Proposed resolution: Record them in the Increment 4 sandbox run and update
-TD-005 and D-019.
-Review trigger: Increment 4.
-Status: Open
+Proposed resolution: Done: the run passed and is recorded.
+Review trigger: None.
+Status: Resolved (2026-11-02). R1 to R4 are closed.
 
 ## Item TD-015 — The adapter has only been tested against a fake PayPal
 
@@ -268,16 +274,47 @@ Impact if left unresolved: A real response could differ from a fixture
 (for example in field names or status codes) and surface only in Increment 4
 or 5.
 Required evidence or dependency: The developer's smoke run
-(`pnpm --filter @ostensia/api smoke`, then with `--create`).
+(`pnpm --filter @ostensia/api smoke`, then with `--lifecycle`; the Increment 3
+`--create` option was replaced by `--lifecycle` in Increment 4).
 Estimated future size: S
 Proposed resolution: Run the smoke script, record the sanitized output under
 docs/evidence/paypal-lifecycle/, and correct any fixture that differs.
-Review trigger: Before the Increment 4 proposal.
-Status: Partly resolved (2026-11-02). The smoke run exercised checkVault,
-createVaultOrder, getAuthorization and getOrder once against the sandbox, on
-the success path only, and every fixture field it touched matched. Failure
-paths, token expiry and the anomaly paths are still tested only against the
-fake.
+Review trigger: After the lifecycle run.
+Status: Partly resolved (2026-11-02). The Increment 3 smoke run exercised
+checkVault, createVaultOrder, getAuthorization and getOrder once against the
+sandbox, and the Increment 4 lifecycle run exercised captureAuthorization,
+voidAuthorization, the replay and the order captures path, all on the success
+path only. Every fixture field they touched matched. Failure paths, token
+expiry, a pending capture, the cleanup path and the anomaly paths are still
+tested only against the fake.
+
+## Item TD-017 — The sandbox lifecycle run is not repeatable without credentials
+
+Date identified: 2026-11-02
+Related increment: Increment 4
+Why it was deferred: It needs the developer's sandbox credentials and moves
+sandbox money (one $1.00 capture), so it cannot run in the automatic tests
+(D-011).
+Current limitation: apps/api/scripts/lifecycle.ts is tested against a stub
+adapter, not against PayPal. The Increment 3 `--create` run left one
+authorization open whose id was never recorded; nothing can void it, and it
+expires on its own about 29 days after 2026-11-02.
+Impact if left unresolved: The lifecycle orchestration could be wrong in a way
+only the real sandbox shows. The leftover authorization holds a sandbox
+$1.00 until it expires.
+Required evidence or dependency: One `smoke --lifecycle` run (done
+2026-11-02: every step passed and no authorization was left open, see
+docs/evidence/paypal-lifecycle/LIFECYCLE_SMOKE_RESULTS.md).
+Estimated future size: S
+Proposed resolution: Done for the new run. `--lifecycle` voids or captures
+everything it creates and prints a sandbox id only when its own cleanup
+fails, so it cannot leave another orphan. The cleanup path itself has only
+run against a stub.
+Review trigger: None for the run. The leftover Increment 3 authorization
+simply expires.
+Status: Partly resolved (2026-11-02). The lifecycle run is recorded. The
+orphaned Increment 3 authorization cannot be voided and is accepted until it
+expires.
 
 ## Item TD-016 — No token refresh-and-retry, and no read retries
 

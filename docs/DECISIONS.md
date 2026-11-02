@@ -1205,6 +1205,106 @@ The smoke run or the Increment 4 sandbox run contradicts a fixture shape.
 The developer runs the smoke script (R1). Increment 4 adds capture and void
 behind the same outcome model. Increment 5 wires the adapter into the gate.
 
+## Decision D-021 — Capture and void in the adapter, and closing E-1 for Increment 4
+
+Date: 2026-11-02
+Status: Accepted (2026-11-02, by the developer)
+Related increment: Increment 4
+Related findings: D-007, D-010, D-018, D-019, D-020; docs/evidence/paypal-lifecycle/ (E1-C.4 to C.7, E1-V.3 to V.5)
+Related risks: A duplicate capture; a capture whose outcome is unknown; reporting a void that did not happen; leaving a sandbox authorization open
+Related questions: R2 and R3 (TD-014)
+
+### Context
+The domain can already decide capture, void or nothing (nextPaymentAction,
+D-018). The adapter could create orders and read state but could not perform
+either payment write. E-1 was still formally open for this increment because of
+the residuals R2 to R4 (TD-014).
+
+### Options considered
+1. E-1 closure for this increment.
+   - A. Close R3 from the collection definition, close R4 as not needed, and
+     make R2 an acceptance criterion of the lifecycle run, so code proceeds
+     on the shapes E-1 observed.
+   - B. The developer records R2 in Postman before any capture or void code is
+     written.
+2. Where void confirmation lives.
+   - A. Inside voidAuthorization, with one GET.
+   - B. Return "void requested" and let the gate confirm.
+3. The capture body.
+   - A. The E-1 shape, {"final_capture": true}, with no amount.
+   - B. The amount sent explicitly (an untested request shape).
+4. The lifecycle run.
+   - A. Both paths.
+   - B. The capture path only.
+5. The script option that creates orders.
+   - Replace --create with --lifecycle, which settles everything it creates.
+   - Keep --create.
+
+### Decision
+Option A for 1 to 4, and the replacement in 5, all chosen by the developer.
+- E-1 is closed for Increment 4 on these terms: R3's field path is
+  purchase_units[].payments.captures, from request E1-C.6; R4 is closed as
+  not needed; R2 must pass in the lifecycle run (the authorization reads
+  CAPTURED after a capture). The developer records the run.
+- captureAuthorization sends the E-1 capture request once: a full capture with
+  no amount, Prefer: return=representation, and a request id built from the
+  attempt id and "capture". A 201 (the capture) or a 200 (the E-1 replay) with
+  a readable body is "accepted". Only capture state "completed" means money
+  moved. "pending" and unknown states are not completion.
+- voidAuthorization sends the E-1 void request once (an empty JSON body, no
+  Prefer). On 204 or 200 it reads the authorization once and returns "voided"
+  only if the read shows VOIDED. Any other read, or no read, is "unknown"
+  with reason void_unconfirmed.
+- A 422 whose issue is PREVIOUSLY_CAPTURED or AUTHORIZATION_VOIDED is
+  "already_terminal": settled already, to be reconciled by reading state. Any
+  other 4xx is "rejected". Timeouts, network errors, 408, 409, 429, 5xx,
+  unexpected statuses and unreadable 2xx are "unknown", and for a capture
+  this means the money may have moved. Neither write is ever retried.
+- The adapter still has no authorize, reauthorize or refund call, and the
+  boundary test forbids all three.
+- OrderSnapshot gains captures, so a reconciliation read can find the capture
+  id after an unknown capture.
+- The lifecycle run (smoke --lifecycle, scripts/lifecycle.ts) never attempts
+  capture-after-void unless the void was confirmed, because against a still
+  CREATED authorization it would really capture. Anything left unsettled is
+  voided, and a sandbox id is printed only when that cleanup also fails.
+  --create is removed.
+
+### Rationale
+Each write keeps the outcome model from D-020, so a caller cannot mistake
+"maybe done" for "done" or "failed". Confirming a void with a read follows
+D-019. Settling everything the run creates fixes the orphaned authorization
+that --create left behind (TD-017).
+
+### Trade-offs
+- The lifecycle run moves $1.00 of sandbox money once and is run by the
+  developer, so it cannot be part of the automatic tests.
+- The replay in the lifecycle run sends a second capture request with the same
+  request id on purpose, to evidence what PayPal does. The application never
+  does this by itself (D-010).
+- A pending capture cannot be voided, so a run that ends with one prints the
+  sandbox id and asks for manual handling.
+
+### Verification
+25 test files and 827 tests: the exact request shape of each write, every
+result class with a count of POST calls, the void-then-confirm paths, the two
+E-1 refusals, input checks, the order captures path, nextPaymentAction driving
+the writes (including the cases where no request at all may be sent), and the
+lifecycle orchestration against a stub. 22 of 22 deliberate mutations were
+caught. The developer then ran `smoke --lifecycle` against the sandbox
+(2026-11-02) and every step passed, including R1, R2 and R3, with no
+authorization left open (docs/evidence/paypal-lifecycle/LIFECYCLE_SMOKE_RESULTS.md).
+That run covers the success path only.
+
+### Revisit trigger
+The lifecycle run contradicts a fixture shape, or PayPal answers a replay
+differently from E-1.
+
+### Follow-up
+TD-014 is resolved (R1 to R4 closed), so E-1 is closed. Increment 5 wires the
+gate: pre-check, create order, read authorization, final
+evaluation, nextPaymentAction, then one write.
+
 ## Template for later entries
 
 ### Decision D-NNN — [Title]

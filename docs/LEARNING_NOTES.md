@@ -503,6 +503,90 @@ test fail even if the adapter turns it into a harmless-looking result.
 ### Questions I still cannot answer
 - (To be written by the developer.)
 
+## Topic: Capture and void: write once, and never trust a 2xx alone
+
+### Plain-language explanation
+A capture moves the money and a void releases the hold. Both are sent exactly
+once. PayPal answers a capture with a capture object; only its status
+COMPLETED means money moved, because PENDING does not. PayPal answers a void
+with 204 and no body, so the adapter reads the authorization once and reports
+"voided" only if the read shows VOIDED. If either write hits an authorization
+that is already settled, PayPal refuses with 422 and one of two issues
+(PREVIOUSLY_CAPTURED, AUTHORIZATION_VOIDED); the adapter reports that as
+"already_terminal" and the caller reads the state to see which.
+
+### Where it appears in Ostensia
+apps/api/src/paypal/adapter.ts (captureAuthorization, voidAuthorization,
+writeFailureFrom) and packages/domain/src/payment-action.ts, which decides
+whether either is called. The domain rule is tested driving the adapter in
+domain-integration.test.ts.
+
+### Why this design was selected
+A capture cannot be undone, and a void that did not happen would leave money
+held while the application thinks it is free. Reading after a void and
+refusing to guess after a timeout keep the record true.
+
+### Alternative
+Reporting "voided" on the 204 alone, or retrying a capture that timed out. It
+was not selected because the first trusts a status code over the state
+(D-019), and the second could take the money twice (D-010).
+
+### Failure case
+A capture times out. The result is "unknown", exactly one POST was sent, and
+the next step is to read the authorization (CAPTURED?) and the order's
+captures, not to post again.
+
+### Evidence
+capture-void.test.ts (every result class with a POST count, the void-then-read
+paths) and the E-1 refusals. Removing the confirmation read, or the 422
+check, made tests fail (22 of 22 mutations caught).
+
+### Explain it to a judge
+(To be written by the developer.)
+
+### Questions I still cannot answer
+- (To be written by the developer.)
+
+## Topic: A test run must not leave a mess behind
+
+### Plain-language explanation
+The first sandbox smoke run created an authorization and printed no id, so
+nobody could void it. The lifecycle run that replaced it settles everything
+it creates: it captures one order, voids the other, and if a step leaves an
+authorization in an unknown state it tries a void. It prints a sandbox id only
+when that cleanup also fails. It also refuses to try a capture after a void
+unless the void was confirmed, because against an authorization that is still
+open that "refusal check" would really capture.
+
+### Where it appears in Ostensia
+apps/api/scripts/lifecycle.ts, paypal-smoke.ts and lifecycle.test.ts.
+
+### Why this design was selected
+A tool that moves money, even sandbox money, must be safe to run twice and
+safe when a step fails halfway.
+
+### Alternative
+Keep --create and tell the developer to clean up in Postman. It was not
+selected because the id was never available to clean up with.
+
+### Failure case
+The void times out. The run does not attempt the capture-after-void check,
+voids the authorization in cleanup, and reports the failure.
+
+### Evidence
+lifecycle.test.ts: the call order of the happy path, a capture that is never
+attempted after an unconfirmed void, cleanup after an unknown capture, and the
+id printed only when cleanup fails. This is tested against a stub. The
+developer's real run on 2026-11-02 passed every step and left nothing open
+(LIFECYCLE_SMOKE_RESULTS.md); the cleanup path itself has not run against
+PayPal (TD-017).
+
+### Explain it to a judge
+(To be written by the developer.)
+
+### Questions I still cannot answer
+- (To be written by the developer.)
+
 ## Template for later entries
 
 ## Topic: [Concept]

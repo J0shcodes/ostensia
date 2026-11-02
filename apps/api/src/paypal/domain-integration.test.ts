@@ -2,7 +2,17 @@ import { finalEvaluatePurchase, nextPaymentAction } from "@ostensia/domain";
 import type { ConfirmedMandate, PurchaseProposal } from "@ostensia/domain";
 import { describe, expect, it } from "vitest";
 import { createPayPalAdapter, toObservedPayment } from "./adapter.ts";
-import { SYNTH, authorizationBody, createFakeFetch, jsonResponse, testConfig, tokenBody } from "./test-support.ts";
+import type { PayPalAdapter } from "./adapter.ts";
+import {
+  SYNTH,
+  authorizationBody,
+  captureBody,
+  createFakeFetch,
+  emptyResponse,
+  jsonResponse,
+  testConfig,
+  tokenBody,
+} from "./test-support.ts";
 
 // Adapter snapshot -> toObservedPayment -> finalEvaluatePurchase ->
 // nextPaymentAction: the path the gate will follow in Increment 5, with a fake
@@ -95,5 +105,109 @@ describe("adapter output through the final evaluation and the payment-action rul
     );
     expect(codes(decision)).toEqual(["MANDATE_REVOKED"]);
     expect(nextPaymentAction(decision, authorization.state)).toBe("void");
+  });
+});
+
+// The final step of the gate (Increment 5), in miniature: the domain rule picks
+// the action and only then does the adapter send a write. When the rule says
+// "none", no request of any kind may leave, not even a token request.
+describe("nextPaymentAction decides which adapter write is sent", () => {
+  const WRITE = { attemptId: "attempt-1", authorizationId: SYNTH.authorizationId } as const;
+  const AUTH = `/v2/payments/authorizations/${SYNTH.authorizationId}`;
+  const ALLOW = { decision: "allow", computedTotalMinor: 7200 };
+  const BLOCK = { decision: "block", violations: [{ code: "MANDATE_REVOKED" }] };
+
+  function setup() {
+    const fake = createFakeFetch();
+    const adapter = createPayPalAdapter({ config: testConfig(), fetch: fake.fetch, timeoutMs: 1000 });
+    return { fake, adapter };
+  }
+
+  async function act(adapter: PayPalAdapter, decision: unknown, state: unknown) {
+    const action = nextPaymentAction(decision, state);
+    if (action === "capture") return { action, result: await adapter.captureAuthorization(WRITE) };
+    if (action === "void") return { action, result: await adapter.voidAuthorization(WRITE) };
+    return { action, result: null };
+  }
+
+  it("captures for a valid allow and a created authorization, and never voids", async () => {
+    const { fake, adapter } = setup();
+    fake.on("POST", "/v1/oauth2/token", jsonResponse(200, tokenBody()));
+    fake.on("POST", `${AUTH}/capture`, jsonResponse(201, captureBody()));
+    const { action, result } = await act(adapter, ALLOW, "created");
+    expect(action).toBe("capture");
+    expect(result).toMatchObject({ kind: "accepted", capture: { state: "completed" } });
+    expect(fake.callsTo("POST", `${AUTH}/capture`)).toHaveLength(1);
+    expect(fake.callsTo("POST", `${AUTH}/void`)).toHaveLength(0);
+    expect(fake.unscripted).toEqual([]);
+  });
+
+  it("voids for a valid block and a created authorization, and never captures", async () => {
+    const { fake, adapter } = setup();
+    fake.on("POST", "/v1/oauth2/token", jsonResponse(200, tokenBody()));
+    fake.on("POST", `${AUTH}/void`, emptyResponse(204));
+    fake.on("GET", AUTH, jsonResponse(200, authorizationBody({ status: "VOIDED" })));
+    const { action, result } = await act(adapter, BLOCK, "created");
+    expect(action).toBe("void");
+    expect(result).toEqual({ kind: "voided" });
+    expect(fake.callsTo("POST", `${AUTH}/void`)).toHaveLength(1);
+    expect(fake.callsTo("POST", `${AUTH}/capture`)).toHaveLength(0);
+    expect(fake.unscripted).toEqual([]);
+  });
+
+  it.each(["captured", "partially_captured", "voided", "denied", "pending", "expired", "unknown"])(
+    "sends nothing at all when the authorization is %s, for an allow and for a block",
+    async (state) => {
+      for (const decision of [ALLOW, BLOCK]) {
+        const { fake, adapter } = setup();
+        const { action, result } = await act(adapter, decision, state);
+        expect(action).toBe("none");
+        expect(result).toBeNull();
+        expect(fake.calls).toHaveLength(0);
+      }
+    },
+  );
+
+  it.each<[string, unknown]>([
+    ["no decision", undefined],
+    ["null", null],
+    ["a block with no violations", { decision: "block", violations: [] }],
+    ["an allow with a string total", { decision: "allow", computedTotalMinor: "7200" }],
+    ["an unknown decision word", { decision: "maybe" }],
+  ])("sends nothing at all for %s, even with a created authorization", async (_label, decision) => {
+    const { fake, adapter } = setup();
+    const { action } = await act(adapter, decision, "created");
+    expect(action).toBe("none");
+    expect(fake.calls).toHaveLength(0);
+  });
+
+  it("sends nothing for a raw PayPal status string that was not mapped first", async () => {
+    const { fake, adapter } = setup();
+    const { action } = await act(adapter, ALLOW, "CREATED");
+    expect(action).toBe("none");
+    expect(fake.calls).toHaveLength(0);
+  });
+
+  it("runs read -> final evaluation -> write: a tampered amount ends in a void, not a capture", async () => {
+    const { fake, adapter } = setup();
+    fake.on("POST", "/v1/oauth2/token", jsonResponse(200, tokenBody()));
+    fake.on(
+      "GET",
+      AUTH,
+      jsonResponse(200, authorizationBody({ amount: { currency_code: "USD", value: "72.01" } })),
+      jsonResponse(200, authorizationBody({ status: "VOIDED" })),
+    );
+    fake.on("POST", `${AUTH}/void`, emptyResponse(204));
+
+    const read = await adapter.getAuthorization(SYNTH.authorizationId);
+    if (read.kind !== "ok") throw new Error("expected ok");
+    const decision = finalEvaluatePurchase(MANDATE, PROPOSAL, toObservedPayment(read.authorization), NOW);
+    expect(codes(decision)).toEqual(["OBSERVED_AMOUNT_MISMATCH"]);
+
+    const { action, result } = await act(adapter, decision, read.authorization.state);
+    expect(action).toBe("void");
+    expect(result).toEqual({ kind: "voided" });
+    expect(fake.callsTo("POST", `${AUTH}/capture`)).toHaveLength(0);
+    expect(fake.unscripted).toEqual([]);
   });
 });
