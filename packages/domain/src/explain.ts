@@ -55,6 +55,8 @@ export function explainViolation(violation: Violation): string {
       return "The currency PayPal reports does not match the mandate currency (USD).";
     case "BINDING_MISMATCH":
       return "The payment is not bound to the confirmed mandate: the reference stored with the payment does not match the mandate's hash.";
+    case "MANDATE_HASH_MISMATCH":
+      return "The stored mandate no longer matches the hash it was confirmed with, so it cannot be trusted.";
     default: {
       const unhandled: never = violation.code;
       return String(unhandled);
