@@ -587,6 +587,86 @@ PayPal (TD-017).
 ### Questions I still cannot answer
 - (To be written by the developer.)
 
+## Topic: State is the replay of a log, and the log is written first
+
+### Plain-language explanation
+The gate keeps no separate database. Every fact is an event appended to a log
+file, and the gate's whole state (mandates, attempts, their statuses) is what
+you get by replaying the events in order. Before the gate sends anything to
+PayPal that can move money or create an authorization, it writes an event that
+says "I am about to do this" and flushes it to disk. The result is written
+after. If the process dies in between, the replay finds a request with no
+result. It reports that as "unknown", never as "failed", because the PayPal
+call may have gone through.
+
+### Where it appears in Ostensia
+apps/api/src/gate/events.ts (the event types), state.ts (applyEvent and
+finalizeReplay), audit-log.ts (the file) and gate.ts (record, which appends
+and then changes state).
+
+### Why this design was selected
+One source of truth, so a restart cannot disagree with what happened. And a
+crash can never silently look like a harmless failure: an order or a capture
+that might exist is always visible as unknown.
+
+### Alternative
+Keep state in memory and write the log as a side note, or use a database. It
+was not selected because the first can disagree with the log after a crash, and
+D-008 chose no database for the MVP.
+
+### Failure case
+The disk fills up while the gate is about to capture. The request event cannot
+be written, so nothing is sent to PayPal, and the gate refuses everything else
+until it is restarted.
+
+### Evidence
+gate-recovery.test.ts cuts a real run's log at every point and checks the
+status each cut gives, and fails the log at each critical event.
+
+### Explain it to a judge
+(To be written by the developer.)
+
+### Questions I still cannot answer
+- (To be written by the developer.)
+
+## Topic: One use per mandate, and why the check and the first event share a lock
+
+### Plain-language explanation
+A mandate says what a person is willing to spend, once. Nothing in the amount
+limits stops a second purchase under the same mandate, so the gate refuses a
+new attempt while another is in progress, captured or unknown. A blocked,
+failed or voided attempt does not use the mandate up. Checking "is it in use?"
+and recording the new attempt must happen together: if two requests check at the
+same moment, both see "free" and both start. The gate puts the check and the
+first event under one lock per mandate.
+
+### Where it appears in Ostensia
+apps/api/src/gate/gate.ts (authorizeLocked, the reservation), mutex.ts and
+state.ts (consumesMandate).
+
+### Why this design was selected
+It is the smallest rule that closes the repeat-purchase gap without changing
+the domain schema (D-022). A cumulative budget would be a domain change.
+
+### Alternative
+Unlimited use, or a budget across attempts. It was not selected because the
+first lets a mandate be spent over and over, and the second needs a new rule
+and tests in the domain.
+
+### Failure case
+Three requests for one mandate arrive at once. Exactly one reaches PayPal; the
+other two are refused as "mandate in use".
+
+### Evidence
+gate-authorize.test.ts (the race) and the mutation that gave each attempt its
+own lock, which made that test fail.
+
+### Explain it to a judge
+(To be written by the developer.)
+
+### Questions I still cannot answer
+- (To be written by the developer.)
+
 ## Template for later entries
 
 ## Topic: [Concept]

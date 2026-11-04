@@ -6,13 +6,13 @@ Last updated: 2026-11-02
 
 ## Status
 
-- **Current increment:** Increment 4 — capture and void in the PayPal adapter,
-  plus the `smoke --lifecycle` run. Implemented and verified on branch
-  feat/paypal-capture-and-void (from main at c900015). The automatic tests use
-  a fake PayPal; the developer's `smoke --lifecycle` run against the real
-  sandbox passed every step on 2026-11-02 (see below). Code committed in
-  e5ae3b4, records in the docs commit that follows it. Not pushed or merged
-  yet.
+- **Current increment:** Increment 5a — the gate core (no HTTP): mandates,
+  the attempt state machine, the audit log, the state rebuilt from it,
+  authorize, settle, run and reconcile. Implemented and verified against a
+  stub adapter on branch feat/gate-store-and-api (from main at 27edf3d);
+  awaiting the walkthrough, comprehension questions and commit authorization.
+  It has never run against the real sandbox: the gate is not wired to the
+  server, and 5b adds the routes and the end-to-end sandbox run.
 - **Passed:**
   - Repository audit (2026-10-29).
   - Directory rename, MIT license and decisions D-001 to D-005,
@@ -34,20 +34,23 @@ Last updated: 2026-11-02
     committed in d98e76e and 8fa99c5 and merged to main through PR #3
     (c900015). Checks: 723 tests, 31 of 31 mutations caught; the developer's
     sandbox smoke run passed on the success path.
-  - Increment 4 checks (2026-11-02), all against a fake fetch built from the
-    E-1 response shapes with synthetic values (D-011) and a stub adapter for
-    the lifecycle orchestration: pnpm test passes (25 files, 827 tests), pnpm
-    typecheck passes, 22 of 22 deliberate rule mutations were caught,
-    GET /health returns 200 from a real node process, and the smoke script's
-    option and configuration errors print no values. Nothing was sent to
-    PayPal.
+  - Increment 4 (capture and void in the adapter, `smoke --lifecycle`),
+    committed in e5ae3b4 and 07ad473 and merged to main through PR #4
+    (27edf3d). Checks: 827 tests, 22 of 22 mutations caught; the developer's
+    sandbox lifecycle run passed every step.
+  - Increment 5a checks (2026-11-02), all against a stub adapter (D-011):
+    pnpm test passes (33 files, 1124 tests), pnpm typecheck passes, 30 of 31
+    deliberate rule mutations were caught (the survivor is the fsync of the
+    log, which a test cannot observe), and GET /health returns 200 from a real
+    node process. Nothing was sent to PayPal.
 - **Broken:** The spike runner (docs/evidence/spike/scripts/run-spike.js)
   points to countersign-spike.* files and a SPIKE_README.md that do not
   exist (TD-001). The application does not use it.
-- **Not yet existing (expected):** the gate, routes and store, AI
-  integration, persistence, the frontend. The PayPal adapter (including
-  captureAuthorization and voidAuthorization) exists in apps/api/src/paypal/
-  but is not wired into the server.
+- **Not yet existing (expected):** HTTP routes, the synthetic catalogue and
+  simulated-agent scenarios, AI integration, the frontend. The PayPal adapter
+  (apps/api/src/paypal/) and the gate (apps/api/src/gate/) exist but are not
+  wired into the server. The audit file path is not configured yet (5b); no
+  audit file exists.
 - **Sandbox smoke run, Increment 3 (done 2026-11-02 by the developer):** the
   read-only run and the `--create` run both passed on the success path; R1 is
   closed. The sanitized report is in
@@ -62,9 +65,9 @@ Last updated: 2026-11-02
   was left open. The sanitized report is in
   docs/evidence/paypal-lifecycle/LIFECYCLE_SMOKE_RESULTS.md. It covers the
   success path only (TD-015).
-- **Next approved task:** None. Increment 5 needs a separate approval.
-- **Next comprehension gate:** None open. The developer answered the
-  Increment 4 questions correctly.
+- **Next approved task:** None. Increment 5b (routes, catalogue, scenarios,
+  end-to-end sandbox run) needs its own proposal and approval after 5a.
+- **Next comprehension gate:** Increment 5a walkthrough.
 
 ## Evidence gates
 
@@ -103,8 +106,9 @@ Each increment needs separate approval.
 | 2a | Domain: schemas, canonical hash, pre-check evaluator, explanations | Complete (4a4de58, 2fd55f8) |
 | 2b | Domain: final evaluation, PayPal status mappings, payment-action rules | Complete (d95cd6d, 6817a58; merged in 4484fc5) |
 | 3 | PayPal adapter: token, vault check, create order, read order and authorization | Complete (d98e76e, 8fa99c5; merged in c900015); success path confirmed by the developer's sandbox smoke run |
-| 4 | Capture and void in the adapter, and the sandbox lifecycle run | Complete (e5ae3b4 and its docs commit); the developer's `smoke --lifecycle` run passed every step (R2, R3 closed; E-1 closed); not yet merged |
-| 5 | Gate service, store, routes | Not started |
+| 4 | Capture and void in the adapter, and the sandbox lifecycle run | Complete (e5ae3b4, 07ad473; merged in 27edf3d); the developer's `smoke --lifecycle` run passed every step (R2, R3 closed; E-1 closed) |
+| 5a | Gate core: mandates, attempts, audit log, authorize, settle, reconcile (no HTTP) | Implemented against a stub adapter; awaiting walkthrough and commit |
+| 5b | Routes, synthetic catalogue, simulated-agent scenarios, end-to-end sandbox run | Not started; needs its own proposal |
 | 6 | AI mandate drafting | Not started; provider undecided |
 | 7 | Next.js frontend | Not started |
 | 8 | Demo hardening and publication review | Not started |
