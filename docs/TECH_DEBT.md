@@ -129,7 +129,9 @@ Required evidence or dependency: The hackathon's hosting requirement.
 Estimated future size: M
 Proposed resolution: At least a demo passcode if the demo is hosted.
 Review trigger: Hosting becomes required.
-Status: Accepted for MVP
+Status: Accepted for MVP. Since Increment 5b the API has routes, and an
+attempt's response includes the sandbox order and authorization ids and the
+mandate hash. The server listens on 127.0.0.1 only (config.ts).
 
 ## Item TD-008 — USD only
 
@@ -213,7 +215,8 @@ or real catalogue data.
 Estimated future size: S
 Proposed resolution: Adjust the limits to match the catalogue.
 Review trigger: A catalogue id or order size is rejected.
-Status: Accepted for MVP
+Status: Accepted for MVP. The Increment 5b synthetic catalogue and its
+scenarios all fit these limits; nothing was rejected.
 
 ## Item TD-013 — Evaluator behaviour with hostile input objects is untested
 
@@ -287,6 +290,10 @@ voidAuthorization, the replay and the order captures path, all on the success
 path only. Every fixture field they touched matched. Failure paths, token
 expiry, a pending capture, the cleanup path and the anomaly paths are still
 tested only against the fake.
+Update (2026-11-05): the Increment 5b end-to-end run drove the gate and the
+routes against the sandbox and every step passed
+(docs/evidence/paypal-lifecycle/E2E_RESULTS.md). It was again the success paths
+only; the failure paths above are still tested only against the fake.
 
 ## Item TD-017 — The sandbox lifecycle run is not repeatable without credentials
 
@@ -334,6 +341,91 @@ Estimated future size: S
 Proposed resolution: Decide in Increment 5 whether the gate retries reads,
 and keep writes unretried.
 Review trigger: Increment 5.
+Status: Accepted for MVP. Decided in Increment 5a (D-022): the gate never
+retries a read by itself. A failed read at settle is recorded as
+settle_read_failed, the attempt stays authorized, and the caller may settle
+again, because nothing was written. Reconcile only reads, and a failed read
+leaves the attempt as it was. Writes are still never retried.
+
+## Item TD-018 — An order request with no result cannot be followed up
+
+Date identified: 2026-11-02
+Related increment: Increment 5a
+Why it was deferred: Finding the order again needs either its id or a deliberate
+re-send of the create request, and D-010 forbids automatic write retries.
+Current limitation: If the process dies, or PayPal does not answer, between
+"order requested" and "order result", the attempt becomes create_unknown with
+no order id. Reconcile has nothing to read, so it reports "not applicable". The
+authorization, if PayPal made one, expires by itself after about 29 days. The
+mandate stays in use (single-use rule), so it cannot be used again.
+Impact if left unresolved: A mandate can be stuck, and funds can be held until
+the authorization expires.
+Required evidence or dependency: A decision on whether a deliberate re-send of
+the create request with the same PayPal-Request-Id is acceptable. E-1 showed a
+capture replay returns the original result; it did not test a create replay.
+Estimated future size: S
+Proposed resolution: Test a create replay in the sandbox, then decide. Until
+then a person creates a new mandate.
+Review trigger: Increment 8 (demo hardening), or any unknown create seen in a run.
+Status: Accepted for MVP
+
+## Item TD-019 — The audit log is not tamper-evident
+
+Date identified: 2026-11-02
+Related increment: Increment 5a
+Why it was deferred: Signing or chaining the log is beyond the MVP, and the log
+is a local file (D-008, D-013).
+Current limitation: Anyone who can edit data/audit.jsonl can rewrite history.
+The gate does catch one kind of edit: a mandate whose terms were changed but
+not its hash fails the integrity check (D-015), and that is tested. An edit to
+an attempt, a decision or a status is not detected, and a mandate edited
+together with its hash is not detected.
+Impact if left unresolved: The log is evidence only if the file is trusted.
+Required evidence or dependency: A decision to chain event hashes or to sign
+the log.
+Estimated future size: M
+Proposed resolution: A hash chain over the events, verified at startup.
+Review trigger: Hosting becomes required (TD-007), or the log is shown as
+evidence to a third party.
+Status: Accepted for MVP
+
+## Item TD-020 — Refused requests are not written to the audit log
+
+Date identified: 2026-11-02
+Related increment: Increment 5a
+Why it was deferred: A refusal creates no attempt, and the log is rebuilt into
+attempts and mandates, so logging a refusal needs its own event type and a
+decision on what a refusal should keep.
+Current limitation: A request that the gate refuses before an attempt exists
+(invalid proposal, unknown mandate, mandate in use, reused attempt id) returns a
+reason to the caller and leaves no record.
+Impact if left unresolved: The audit shows what the gate did, not what it was
+asked and refused.
+Required evidence or dependency: The API layer (Increment 5b) and what the demo
+needs to show.
+Estimated future size: S
+Proposed resolution: Add an attempt_refused event in 5b, ignored by the state
+rebuild.
+Review trigger: Increment 8 (demo hardening).
+Status: Accepted for MVP. Deferred in Increment 5b (D-023): the HTTP response
+already shows the refusal to the caller, and the demo does not need it logged.
+
+## Item TD-021 — The gate keeps every applied event in memory
+
+Date identified: 2026-11-04
+Related increment: Increment 5b
+Why it was deferred: The API shows an attempt's audit events (eventsFor), and
+re-reading the file on each request could race with the torn-tail repair and
+with appends. Keeping the events already applied is simpler (D-023).
+Current limitation: The list grows with every event for the life of the process
+and is rebuilt from the whole file at startup.
+Impact if left unresolved: Memory use grows with use. For a local demo with a
+few attempts it is negligible.
+Required evidence or dependency: A long-running or hosted deployment (TD-007).
+Estimated future size: S
+Proposed resolution: Index the events by attempt and mandate, or read them from
+the file on demand under the same lock as the append.
+Review trigger: Hosting becomes required, or the log passes a few thousand events.
 Status: Accepted for MVP
 
 ## Template for later entries

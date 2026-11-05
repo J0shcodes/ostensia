@@ -1305,6 +1305,223 @@ TD-014 is resolved (R1 to R4 closed), so E-1 is closed. Increment 5 wires the
 gate: pre-check, create order, read authorization, final
 evaluation, nextPaymentAction, then one write.
 
+## Decision D-022 — The gate: state rebuilt from the audit log, write-ahead events, one use per mandate
+
+Date: 2026-11-02
+Status: Accepted (2026-11-02, by the developer: Increment 5a as proposed, with
+the recommended option for each of the four questions)
+Related increment: Increment 5a
+Related findings: D-007, D-008, D-010, D-015, D-018, D-019, D-020, D-021
+Related risks: A duplicate capture; acting without a record; a crash that looks like a failure; a mandate spent twice; a tampered stored mandate
+Related questions: TD-018, TD-019, TD-020
+
+### Context
+The domain decides, and the adapter talks to PayPal, but nothing yet ran them
+in the order D-007 requires. Increment 5 is large, so the developer approved
+splitting it: 5a is the gate with no HTTP, 5b adds the routes and the end-to-end
+run.
+
+### Options considered
+1. Split: 5a (gate core) then 5b, or one increment.
+2. Mandate reuse: single-use; unlimited; or a cumulative budget (a domain
+   change).
+3. The revoke-before-settlement demo: authorize and settle as two real steps,
+   or a labelled simulation hook inside the payment logic.
+4. Unknown outcomes: reconcile that only reads, or also a deliberate re-send of
+   the request with the same request id.
+
+### Decision
+The recommended option in each case: a 5a/5b split; single use; two real
+steps; read-only reconcile.
+
+The gate:
+- authorize: check that the stored mandate still matches its hash (D-015), run
+  the pre-check, and create the order. settle: read the authorization, check
+  the hash again, run the final evaluation, then at most one capture or void
+  chosen by nextPaymentAction. run does both.
+- All state is the result of applying audit events in order and is rebuilt from
+  the log at startup. There is no second store.
+- A PayPal write (the order, the capture, the void) is recorded and flushed to
+  disk BEFORE it is sent; its result is recorded after. After a restart, a
+  request with no result is "unknown" (create_unknown, write_unknown), never
+  "failed". An attempt that never reached PayPal is "abandoned".
+- If the log cannot be written, or an adapter call throws, the gate stops and
+  refuses everything until restart. Nothing is sent when the request event
+  cannot be recorded.
+- A pre-check block, an integrity failure, a total of nothing, or a refused
+  request makes no PayPal call at all. A failed read at settle is recorded and
+  leaves the attempt authorized, so settle may be called again; nothing was
+  written. A write is never sent twice for one attempt.
+- A mandate is used once: a new attempt is refused while another attempt for
+  the mandate is in progress, captured or unknown. Blocked, failed, voided and
+  abandoned attempts leave it free. The check and the first event share a lock
+  per mandate, so two requests cannot both pass.
+- A repeated request with the same attempt id returns the existing attempt; the
+  same id with a different request is refused.
+- reconcile only reads (the authorization, and the order's captures for a
+  capture). It concludes "captured" or "voided" only when the evidence matches
+  the action the gate intended, "conflict" when the authorization was settled
+  the other way, and otherwise leaves the attempt as it was. A failed read
+  leaves it unchanged.
+- A torn last line of the log is moved to a side file and skipped with a
+  warning (D-008); a damaged line anywhere else, or an event that refers to
+  something that never existed, refuses startup.
+
+Two small domain changes, found necessary by this design:
+- A new violation code, MANDATE_HASH_MISMATCH, with its explanation, so an
+  integrity failure is a Decision that nextPaymentAction can act on (a void
+  when an authorization already exists). The evaluators never raise it; only
+  the gate does.
+- Violation's optional fields accept an explicit undefined, to match what Zod
+  parses (exactOptionalPropertyTypes). No runtime effect.
+
+### Rationale
+One source of truth, rebuilt from a record written first, means a crash can
+never turn an unseen outcome into a quiet failure. Every outcome of the payment
+path is either settled, or visibly waiting for a person.
+
+### Trade-offs
+- An order request with no result cannot be followed up, because there is no
+  order id to read (TD-018).
+- The log is not tamper-evident beyond the mandate hash check (TD-019).
+- Refusals before an attempt exists are not logged (TD-020).
+- One process only (TD-003). The locks are in-process mutexes.
+- The gate has never run against the real sandbox; its tests use a stub that
+  behaves like the E-1 sandbox. 5b adds the end-to-end run.
+
+### Verification
+33 test files and 1124 tests: the full transition tables, the zero-call
+guarantees, every create and write outcome, a sweep of every failing or
+tampered step in turn (a capture needs every earlier step to be clean), a crash
+at each point of a real run's log, a log that fails at each critical event,
+persistence in a real file with a torn tail, reconcile against every
+authorization state, and source-boundary scans. 30 of 31 deliberate mutations
+were caught. The survivor removes the fsync of the log, which a test cannot
+observe.
+
+### Revisit trigger
+A crash or unknown outcome seen in a real run, or the decision to host (TD-007).
+
+### Follow-up
+5b: routes, the synthetic catalogue, simulated-agent scenarios, a configured
+audit file path, and an end-to-end sandbox run through the API. Decide TD-020.
+
+## Decision D-023 — The HTTP layer, the simulated agent and the end-to-end run
+
+Date: 2026-11-04
+Status: Accepted (2026-11-04, by the developer: Increment 5b as proposed, with
+the recommended option for each of the four questions)
+Related increment: Increment 5b
+Related findings: D-006, D-007, D-008, D-010, D-012, D-022
+Related risks: A route that decides or calls PayPal itself; a simulation that
+looks real; a client that cannot tell a block from a failure; a run that leaves
+an authorization open
+Related questions: TD-020, TD-007
+
+### Context
+The gate (D-022) worked only inside tests. Increment 5b connects it to HTTP,
+gives it purchases to evaluate (D-012), and runs the whole path once against the
+real sandbox. The developer approved four recommended options: refuse to start
+without PayPal credentials; routes that match the gate's own steps; defer TD-020;
+a scripted end-to-end run.
+
+### Options considered
+1. Startup without PayPal credentials: refuse to start, or start with the payment
+   routes answering 503.
+2. Route shape: match the gate (authorize with an optional settleNow, plus
+   settle and reconcile), or expose only run plus a demo-only two-step endpoint.
+3. TD-020 (refusals in the audit log): defer to Increment 8, or add an
+   attempt_refused event now.
+4. End-to-end check: a scripted run, or a manual curl checklist.
+
+### Decision
+The recommended option in each case.
+
+The routes (apps/api/src/routes/) only translate HTTP into gate calls and gate
+results into responses. They do not call the adapter, evaluate, read the clock,
+touch files or the environment, and a scan test pins that.
+- POST /mandates (the posted terms are the confirmation step until AI drafting),
+  GET /mandates, GET /mandates/:id, POST /mandates/:id/revoke.
+- POST /attempts {attemptId, mandateId, proposal, settleNow?}: authorize, or run
+  when settleNow is true. POST /attempts/:id/settle and /reconcile. GET
+  /attempts and GET /attempts/:id (with the plain-language explanation and the
+  attempt's audit events).
+- GET /catalogue and POST /mandates/:id/simulated-proposal {scenario}.
+- A block decision is a 200 with the attempt, not an error. Refusals: invalid
+  input 400, unknown mandate or attempt 404, a reused attempt id or a mandate in
+  use 409, a stopped gate 503. A failed PayPal read at settle or reconcile is 502
+  and carries the attempt. Bodies over 64 KB are 413; a body that is not JSON is
+  415 or 400.
+- Every error is a fixed code. Framework text, which can quote the request, and
+  unexpected exceptions are never sent to the client; an unexpected exception is
+  logged on the server. If it came from the gate, the gate has already stopped
+  itself (D-022) and the next request gets 503.
+- The caller chooses the attempt id, so a repeated request returns the same
+  attempt (D-022) instead of starting another.
+
+The simulated agent (apps/api/src/simulation/) is a synthetic catalogue of four
+fictional products and a pure function that builds one proposal for one
+scenario: compliant, over_unit_price, over_quantity, wrong_variant,
+unlisted_product, over_total. It decides nothing; the domain evaluator decides.
+Everything it returns says simulated: true with a label. A scenario that cannot
+be built from the mandate is answered with 422 and a reason; the agent never
+builds a different proposal instead. Revoke before settlement is not a scenario:
+it is the real sequence authorize, revoke, settle.
+
+Startup loads both configurations, creates the adapter, replays the audit log
+and creates the gate. It makes no PayPal call. A missing credential, or an audit
+log that cannot be trusted, stops the start. AUDIT_LOG_PATH sets the file
+(default data/audit.jsonl under apps/api/, gitignored).
+
+The gate gains one read method, eventsFor(attemptId), backed by the events it has
+already applied, so the API never reads the file while the gate may be appending
+to it.
+
+The end-to-end run (pnpm --filter @ostensia/api e2e, run by the developer) drives
+these routes in memory with the real adapter: a compliant purchase captured, the
+same request repeated, a second attempt on the spent mandate refused, a purchase
+over the unit-price limit blocked with no PayPal call, a revoke before settlement
+that ends voided, the audit record, and a restart that rebuilds the same state.
+PayPal calls are counted in the run, so "no call" and "one capture" are measured.
+It moves $1.00 of sandbox money once and creates two orders. It captures or
+voids everything it creates: an authorization left waiting is settled after its
+mandate is revoked, which voids it, and one that still cannot be settled is
+reported with its sandbox id. Its report is sanitized like the smoke report.
+
+### Rationale
+Keeping decisions in the gate and translation in the routes means the HTTP layer
+cannot weaken the payment path. Keeping the simulation on the proposal side, and
+labelling it, keeps the demo honest (CLAUDE.md section 7).
+
+### Trade-offs
+- TD-020 stays open: a refusal is shown to the caller and not recorded.
+- The gate holds every applied event in memory for the life of the process
+  (TD-021).
+- The API has no authentication (TD-007), and an attempt's response includes the
+  sandbox order and authorization ids and the mandate hash.
+- The response shapes are a contract for Increment 7.
+- The e2e run covers the success path of each scenario only; failure paths
+  against PayPal are still tested only against the stub (TD-015).
+
+### Verification
+Route tests through the server's in-memory injection for every status mapping,
+the 64 KB limit, the labels, the explanations and a log that fails; scenario
+tests that run every scenario through the real pre-check; e2e orchestration tests
+against the stub, including a step that fails and one that leaves an
+authorization open; a scan test for the route sources; and a real node process
+started with placeholder credentials, which answered /health, created a mandate,
+blocked a purchase, replayed the log after a restart, and refused to start with a
+missing credential or a damaged log. The developer then ran the e2e script against the sandbox on 2026-11-05 and
+every step passed (docs/evidence/paypal-lifecycle/E2E_RESULTS.md).
+
+### Revisit trigger
+The e2e run shows a difference between the stub and PayPal, or hosting is
+required (TD-007).
+
+### Follow-up
+Increment 6 (AI drafting), whose output
+feeds POST /mandates after the user confirms it.
+
 ## Template for later entries
 
 ### Decision D-NNN — [Title]

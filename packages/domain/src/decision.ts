@@ -20,6 +20,9 @@ export const VIOLATION_CODES = [
   "OBSERVED_AMOUNT_MISMATCH",
   "OBSERVED_CURRENCY_MISMATCH",
   "BINDING_MISMATCH",
+  // Raised by the gate, not by the evaluators: the stored mandate no longer
+  // matches its own hash (D-015). The domain never recomputes the hash.
+  "MANDATE_HASH_MISMATCH",
 ] as const;
 
 export type ViolationCode = (typeof VIOLATION_CODES)[number];
@@ -27,13 +30,17 @@ export type ViolationCode = (typeof VIOLATION_CODES)[number];
 // `limit` is the maximum the mandate allows, `expected` is a value that was
 // calculated, and `actual` is what the proposal carried. Money fields are in
 // minor units; quantity fields are counts.
+//
+// The optional fields accept an explicit `undefined` so that the type matches
+// what DecisionSchema parses (Zod's optional); the evaluators never set them to
+// undefined, they leave them out.
 export type Violation = {
   readonly code: ViolationCode;
-  readonly productId?: string;
-  readonly variantId?: string;
-  readonly limit?: number;
-  readonly expected?: number;
-  readonly actual?: number;
+  readonly productId?: string | undefined;
+  readonly variantId?: string | undefined;
+  readonly limit?: number | undefined;
+  readonly expected?: number | undefined;
+  readonly actual?: number | undefined;
 };
 
 export type Decision =

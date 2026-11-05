@@ -52,6 +52,10 @@ describe("explainViolation", () => {
       "The currency PayPal reports does not match the mandate currency (USD).",
     ],
     [
+      { code: "MANDATE_HASH_MISMATCH" },
+      "The stored mandate no longer matches the hash it was confirmed with, so it cannot be trusted.",
+    ],
+    [
       { code: "BINDING_MISMATCH" },
       "The payment is not bound to the confirmed mandate: the reference stored with the payment does not match the mandate's hash.",
     ],
