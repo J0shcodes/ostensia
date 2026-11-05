@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { loadAnthropicConfig } from "./ai/ai-config.ts";
 import type { AnthropicConfig } from "./ai/ai-config.ts";
 import { createAnthropicDrafter } from "./ai/drafter.ts";
+import { createAnthropicShopper } from "./ai/shopper.ts";
 import { ConfigError, loadConfig } from "./config.ts";
 import type { Config } from "./config.ts";
 import { AuditCorruptError } from "./gate/events.ts";
@@ -49,17 +50,22 @@ try {
   throw error;
 }
 
-// Drafting retries 429 and 5xx inside the SDK; it only reads, so that is safe.
-const drafter =
+// Drafting and the shopping agent retry 429 and 5xx inside the SDK; they only read
+// and return text, so that is safe. Both share one client.
+const aiClient =
   anthropicConfig === null
     ? null
-    : createAnthropicDrafter({
-        client: new Anthropic({ apiKey: anthropicConfig.apiKey, baseURL: anthropicConfig.baseUrl, timeout: 90_000 }),
-      });
+    : new Anthropic({ apiKey: anthropicConfig.apiKey, baseURL: anthropicConfig.baseUrl, timeout: 90_000 });
+const drafter = aiClient === null ? null : createAnthropicDrafter({ client: aiClient });
+const shopper = aiClient === null ? null : createAnthropicShopper({ client: aiClient });
 
-const server = buildServer({ logger: true, gate, drafter });
+const server = buildServer({ logger: true, gate, drafter, shopper });
 for (const warning of gate.warnings) server.log.warn(warning);
-if (drafter === null) server.log.warn("ANTHROPIC_API_KEY is not set: AI drafting is off and POST /mandates/draft answers 503.");
+if (drafter === null) {
+  server.log.warn(
+    "ANTHROPIC_API_KEY is not set: AI drafting and the AI shopping agent are off; their routes answer 503.",
+  );
+}
 
 try {
   await server.listen({ host: config.host, port: config.port });

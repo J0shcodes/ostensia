@@ -24,7 +24,16 @@ describe("drafting source boundaries", () => {
   const sources = productionSources();
 
   it("finds the files it is meant to scan", () => {
-    expect(Object.keys(sources).sort()).toEqual(["ai-config.ts", "draft-checks.ts", "drafter.ts", "prompt.ts"]);
+    expect(Object.keys(sources).sort()).toEqual([
+      "ai-config.ts",
+      "cart.ts",
+      "draft-checks.ts",
+      "drafter.ts",
+      "prompt.ts",
+      "provider-errors.ts",
+      "shopper-prompt.ts",
+      "shopper.ts",
+    ]);
   });
 
   it("does not reach the gate, PayPal or the routes", () => {
@@ -35,16 +44,21 @@ describe("drafting source boundaries", () => {
     }
   });
 
-  it("imports the provider SDK in the drafter only", () => {
+  it("imports the provider SDK only in the files that talk to it", () => {
     for (const [name, code] of Object.entries(sources)) {
-      if (name === "drafter.ts") continue;
+      if (["drafter.ts", "shopper.ts", "provider-errors.ts"].includes(name)) continue;
       expect(code, `${name} must not import the SDK`).not.toContain("@anthropic-ai/sdk");
     }
   });
 
-  it("calls the provider from exactly one place, with no tools, no web access and no sampling settings", () => {
-    const drafter = sources["drafter.ts"] ?? "";
-    expect(drafter.split("messages.parse(").length - 1).toBe(1);
+  it("calls the provider from exactly one place in each of the drafter and the agent, and nowhere else", () => {
+    for (const [name, code] of Object.entries(sources)) {
+      const count = code.split("messages.parse(").length - 1;
+      expect(count, `${name} provider calls`).toBe(name === "drafter.ts" || name === "shopper.ts" ? 1 : 0);
+    }
+  });
+
+  it("gives the model no tools, no web access and no sampling settings", () => {
     for (const [name, code] of Object.entries(sources)) {
       expect(code, `${name} must not give the model tools`).not.toMatch(/\btools\s*:|tool_choice|web_search|web_fetch|code_execution|mcp_servers/);
       expect(code, `${name} must not set sampling`).not.toMatch(/\btemperature\b|\btop_p\b|\btop_k\b/);

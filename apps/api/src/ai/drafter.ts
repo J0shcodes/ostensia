@@ -3,6 +3,8 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { MandateDraftSchema } from "@ostensia/domain";
 import type { MandateDraft } from "@ostensia/domain";
 import { SYSTEM_PROMPT, userMessage } from "./prompt.ts";
+import { isOutputParseError, unavailableReason } from "./provider-errors.ts";
+import type { UnavailableReason } from "./provider-errors.ts";
 
 // The mandate drafter (D-024). It sends the person's description to a model and
 // returns a DRAFT: terms for the person to review, edit and confirm. It decides
@@ -21,10 +23,7 @@ export type DraftResult =
   // The model answered, but not with a usable draft.
   | { readonly kind: "invalid_output"; readonly detail: "max_tokens" | "no_output" | "schema_mismatch" }
   // The provider could not be used. Nothing was drafted.
-  | {
-      readonly kind: "unavailable";
-      readonly reason: "auth" | "rate_limited" | "timeout" | "connection" | "bad_request" | "server";
-    };
+  | { readonly kind: "unavailable"; readonly reason: UnavailableReason };
 
 export type MandateDrafter = {
   draft(instruction: string, now: Date): Promise<DraftResult>;
@@ -34,28 +33,6 @@ export type AnthropicDrafterOptions = {
   readonly client: Anthropic;
   readonly model?: string;
 };
-
-function unavailableReason(error: unknown): Extract<DraftResult, { kind: "unavailable" }>["reason"] | null {
-  // Most specific first. A timeout is also a connection error.
-  if (error instanceof Anthropic.APIConnectionTimeoutError) return "timeout";
-  if (error instanceof Anthropic.APIConnectionError) return "connection";
-  if (error instanceof Anthropic.RateLimitError) return "rate_limited";
-  if (error instanceof Anthropic.AuthenticationError || error instanceof Anthropic.PermissionDeniedError) return "auth";
-  if (error instanceof Anthropic.BadRequestError) return "bad_request";
-  if (error instanceof Anthropic.APIError) return "server";
-  return null;
-}
-
-// The SDK reports a reply that does not match the schema as a plain
-// AnthropicError, not an API error. Its message quotes the model's output, so it
-// is never passed on.
-function isOutputParseError(error: unknown): boolean {
-  return (
-    error instanceof Anthropic.AnthropicError &&
-    !(error instanceof Anthropic.APIError) &&
-    error.message.startsWith("Failed to parse structured output")
-  );
-}
 
 export function createAnthropicDrafter(options: AnthropicDrafterOptions): MandateDrafter {
   const { client } = options;
