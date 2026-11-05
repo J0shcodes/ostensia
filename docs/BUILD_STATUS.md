@@ -2,17 +2,16 @@
 
 Compact status note. Read this first at the start of every session.
 
-Last updated: 2026-11-02
+Last updated: 2026-11-04
 
 ## Status
 
-- **Current increment:** Increment 5a — the gate core (no HTTP): mandates,
-  the attempt state machine, the audit log, the state rebuilt from it,
-  authorize, settle, run and reconcile. Implemented and verified against a
-  stub adapter on branch feat/gate-store-and-api (from main at 27edf3d);
-  awaiting the walkthrough, comprehension questions and commit authorization.
-  It has never run against the real sandbox: the gate is not wired to the
-  server, and 5b adds the routes and the end-to-end sandbox run.
+- **Current increment:** Increment 5b — routes, the synthetic catalogue,
+  the simulated agent and the end-to-end sandbox script. Implemented and
+  verified against a stub adapter and a real node process on branch
+  feat/gate-store-and-api (5a is committed there: 6fcfced, 5a40d0f, not yet
+  pushed or merged); the developer's `e2e` sandbox run passed every step (2026-11-05); awaiting
+  the comprehension answers and commit authorization.
 - **Passed:**
   - Repository audit (2026-10-29).
   - Directory rename, MIT license and decisions D-001 to D-005,
@@ -38,19 +37,28 @@ Last updated: 2026-11-02
     committed in e5ae3b4 and 07ad473 and merged to main through PR #4
     (27edf3d). Checks: 827 tests, 22 of 22 mutations caught; the developer's
     sandbox lifecycle run passed every step.
-  - Increment 5a checks (2026-11-02), all against a stub adapter (D-011):
-    pnpm test passes (33 files, 1124 tests), pnpm typecheck passes, 30 of 31
-    deliberate rule mutations were caught (the survivor is the fsync of the
-    log, which a test cannot observe), and GET /health returns 200 from a real
-    node process. Nothing was sent to PayPal.
+  - Increment 5a (gate core, no HTTP), committed in 6fcfced and 5a40d0f.
+    Checks (2026-11-02), all against a stub adapter (D-011): 1124 tests in 33
+    files, typecheck clean, 30 of 31 deliberate rule mutations caught (the
+    survivor is the fsync of the log, which a test cannot observe), and GET
+    /health returns 200 from a real node process. Nothing was sent to PayPal.
+  - Increment 5b checks (2026-11-04), against a stub adapter (D-011): pnpm test
+    passes (37 files, 1205 tests), pnpm typecheck passes, and 24 of 25
+    deliberate mutations of the new code were caught (the survivor is the
+    restart comparison inside the e2e script, which can only fail if replay
+    differs from the live gate; that is tested in the gate's own tests). A real
+    node process with placeholder credentials answered /health, created a
+    mandate, blocked an over-total purchase, rebuilt the attempt from the log
+    after a restart, and refused to start with a missing credential or a damaged
+    log. Nothing was sent to PayPal.
 - **Broken:** The spike runner (docs/evidence/spike/scripts/run-spike.js)
   points to countersign-spike.* files and a SPIKE_README.md that do not
   exist (TD-001). The application does not use it.
-- **Not yet existing (expected):** HTTP routes, the synthetic catalogue and
-  simulated-agent scenarios, AI integration, the frontend. The PayPal adapter
-  (apps/api/src/paypal/) and the gate (apps/api/src/gate/) exist but are not
-  wired into the server. The audit file path is not configured yet (5b); no
-  audit file exists.
+- **Not yet existing (expected):** AI integration, the frontend. The PayPal adapter, the gate, the routes and the
+  simulated agent exist and are wired into the server (AUDIT_LOG_PATH, default
+  data/audit.jsonl under apps/api/, gitignored); the e2e run wrote its own
+  gitignored data/e2e-*.jsonl; the server has not been started with real
+  credentials.
 - **Sandbox smoke run, Increment 3 (done 2026-11-02 by the developer):** the
   read-only run and the `--create` run both passed on the success path; R1 is
   closed. The sanitized report is in
@@ -65,9 +73,15 @@ Last updated: 2026-11-02
   was left open. The sanitized report is in
   docs/evidence/paypal-lifecycle/LIFECYCLE_SMOKE_RESULTS.md. It covers the
   success path only (TD-015).
-- **Next approved task:** None. Increment 5b (routes, catalogue, scenarios,
-  end-to-end sandbox run) needs its own proposal and approval after 5a.
-- **Next comprehension gate:** Increment 5a walkthrough.
+- **Sandbox end-to-end run, Increment 5b (done 2026-11-05 by the developer):**
+  `pnpm --filter @ostensia/api e2e` created two sandbox orders, captured $1.00
+  once, blocked an over-limit purchase with no PayPal call, refused a second use
+  of a mandate, voided the authorization of a revoked mandate, and rebuilt the
+  same state after a restart. Every step passed. The sanitized report is in
+  docs/evidence/paypal-lifecycle/E2E_RESULTS.md. Success paths only (TD-015).
+- **Next approved task:** None. Increment 6 (AI mandate drafting) needs its own
+  proposal and approval after 5b.
+- **Next comprehension gate:** Increment 5b walkthrough.
 
 ## Evidence gates
 
@@ -107,8 +121,8 @@ Each increment needs separate approval.
 | 2b | Domain: final evaluation, PayPal status mappings, payment-action rules | Complete (d95cd6d, 6817a58; merged in 4484fc5) |
 | 3 | PayPal adapter: token, vault check, create order, read order and authorization | Complete (d98e76e, 8fa99c5; merged in c900015); success path confirmed by the developer's sandbox smoke run |
 | 4 | Capture and void in the adapter, and the sandbox lifecycle run | Complete (e5ae3b4, 07ad473; merged in 27edf3d); the developer's `smoke --lifecycle` run passed every step (R2, R3 closed; E-1 closed) |
-| 5a | Gate core: mandates, attempts, audit log, authorize, settle, reconcile (no HTTP) | Implemented against a stub adapter; awaiting walkthrough and commit |
-| 5b | Routes, synthetic catalogue, simulated-agent scenarios, end-to-end sandbox run | Not started; needs its own proposal |
+| 5a | Gate core: mandates, attempts, audit log, authorize, settle, reconcile (no HTTP) | Complete (6fcfced, 5a40d0f); on feat/gate-store-and-api, not yet pushed |
+| 5b | Routes, synthetic catalogue, simulated-agent scenarios, end-to-end sandbox run | Implemented; the developer's `e2e` sandbox run passed every step (2026-11-05); awaiting walkthrough answers and commit |
 | 6 | AI mandate drafting | Not started; provider undecided |
 | 7 | Next.js frontend | Not started |
 | 8 | Demo hardening and publication review | Not started |

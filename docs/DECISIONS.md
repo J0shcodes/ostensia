@@ -1406,6 +1406,122 @@ A crash or unknown outcome seen in a real run, or the decision to host (TD-007).
 5b: routes, the synthetic catalogue, simulated-agent scenarios, a configured
 audit file path, and an end-to-end sandbox run through the API. Decide TD-020.
 
+## Decision D-023 — The HTTP layer, the simulated agent and the end-to-end run
+
+Date: 2026-11-04
+Status: Accepted (2026-11-04, by the developer: Increment 5b as proposed, with
+the recommended option for each of the four questions)
+Related increment: Increment 5b
+Related findings: D-006, D-007, D-008, D-010, D-012, D-022
+Related risks: A route that decides or calls PayPal itself; a simulation that
+looks real; a client that cannot tell a block from a failure; a run that leaves
+an authorization open
+Related questions: TD-020, TD-007
+
+### Context
+The gate (D-022) worked only inside tests. Increment 5b connects it to HTTP,
+gives it purchases to evaluate (D-012), and runs the whole path once against the
+real sandbox. The developer approved four recommended options: refuse to start
+without PayPal credentials; routes that match the gate's own steps; defer TD-020;
+a scripted end-to-end run.
+
+### Options considered
+1. Startup without PayPal credentials: refuse to start, or start with the payment
+   routes answering 503.
+2. Route shape: match the gate (authorize with an optional settleNow, plus
+   settle and reconcile), or expose only run plus a demo-only two-step endpoint.
+3. TD-020 (refusals in the audit log): defer to Increment 8, or add an
+   attempt_refused event now.
+4. End-to-end check: a scripted run, or a manual curl checklist.
+
+### Decision
+The recommended option in each case.
+
+The routes (apps/api/src/routes/) only translate HTTP into gate calls and gate
+results into responses. They do not call the adapter, evaluate, read the clock,
+touch files or the environment, and a scan test pins that.
+- POST /mandates (the posted terms are the confirmation step until AI drafting),
+  GET /mandates, GET /mandates/:id, POST /mandates/:id/revoke.
+- POST /attempts {attemptId, mandateId, proposal, settleNow?}: authorize, or run
+  when settleNow is true. POST /attempts/:id/settle and /reconcile. GET
+  /attempts and GET /attempts/:id (with the plain-language explanation and the
+  attempt's audit events).
+- GET /catalogue and POST /mandates/:id/simulated-proposal {scenario}.
+- A block decision is a 200 with the attempt, not an error. Refusals: invalid
+  input 400, unknown mandate or attempt 404, a reused attempt id or a mandate in
+  use 409, a stopped gate 503. A failed PayPal read at settle or reconcile is 502
+  and carries the attempt. Bodies over 64 KB are 413; a body that is not JSON is
+  415 or 400.
+- Every error is a fixed code. Framework text, which can quote the request, and
+  unexpected exceptions are never sent to the client; an unexpected exception is
+  logged on the server. If it came from the gate, the gate has already stopped
+  itself (D-022) and the next request gets 503.
+- The caller chooses the attempt id, so a repeated request returns the same
+  attempt (D-022) instead of starting another.
+
+The simulated agent (apps/api/src/simulation/) is a synthetic catalogue of four
+fictional products and a pure function that builds one proposal for one
+scenario: compliant, over_unit_price, over_quantity, wrong_variant,
+unlisted_product, over_total. It decides nothing; the domain evaluator decides.
+Everything it returns says simulated: true with a label. A scenario that cannot
+be built from the mandate is answered with 422 and a reason; the agent never
+builds a different proposal instead. Revoke before settlement is not a scenario:
+it is the real sequence authorize, revoke, settle.
+
+Startup loads both configurations, creates the adapter, replays the audit log
+and creates the gate. It makes no PayPal call. A missing credential, or an audit
+log that cannot be trusted, stops the start. AUDIT_LOG_PATH sets the file
+(default data/audit.jsonl under apps/api/, gitignored).
+
+The gate gains one read method, eventsFor(attemptId), backed by the events it has
+already applied, so the API never reads the file while the gate may be appending
+to it.
+
+The end-to-end run (pnpm --filter @ostensia/api e2e, run by the developer) drives
+these routes in memory with the real adapter: a compliant purchase captured, the
+same request repeated, a second attempt on the spent mandate refused, a purchase
+over the unit-price limit blocked with no PayPal call, a revoke before settlement
+that ends voided, the audit record, and a restart that rebuilds the same state.
+PayPal calls are counted in the run, so "no call" and "one capture" are measured.
+It moves $1.00 of sandbox money once and creates two orders. It captures or
+voids everything it creates: an authorization left waiting is settled after its
+mandate is revoked, which voids it, and one that still cannot be settled is
+reported with its sandbox id. Its report is sanitized like the smoke report.
+
+### Rationale
+Keeping decisions in the gate and translation in the routes means the HTTP layer
+cannot weaken the payment path. Keeping the simulation on the proposal side, and
+labelling it, keeps the demo honest (CLAUDE.md section 7).
+
+### Trade-offs
+- TD-020 stays open: a refusal is shown to the caller and not recorded.
+- The gate holds every applied event in memory for the life of the process
+  (TD-021).
+- The API has no authentication (TD-007), and an attempt's response includes the
+  sandbox order and authorization ids and the mandate hash.
+- The response shapes are a contract for Increment 7.
+- The e2e run covers the success path of each scenario only; failure paths
+  against PayPal are still tested only against the stub (TD-015).
+
+### Verification
+Route tests through the server's in-memory injection for every status mapping,
+the 64 KB limit, the labels, the explanations and a log that fails; scenario
+tests that run every scenario through the real pre-check; e2e orchestration tests
+against the stub, including a step that fails and one that leaves an
+authorization open; a scan test for the route sources; and a real node process
+started with placeholder credentials, which answered /health, created a mandate,
+blocked a purchase, replayed the log after a restart, and refused to start with a
+missing credential or a damaged log. The developer then ran the e2e script against the sandbox on 2026-11-05 and
+every step passed (docs/evidence/paypal-lifecycle/E2E_RESULTS.md).
+
+### Revisit trigger
+The e2e run shows a difference between the stub and PayPal, or hosting is
+required (TD-007).
+
+### Follow-up
+Increment 6 (AI drafting), whose output
+feeds POST /mandates after the user confirms it.
+
 ## Template for later entries
 
 ### Decision D-NNN — [Title]

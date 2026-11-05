@@ -667,6 +667,82 @@ own lock, which made that test fail.
 ### Questions I still cannot answer
 - (To be written by the developer.)
 
+## Topic: A thin HTTP layer: the route translates, the gate decides
+
+### Plain-language explanation
+A route does three things: check that the request has the right envelope, call
+one gate method, and turn the gate's answer into a status code and a body. It
+decides nothing about payment. A purchase that breaks the mandate is not an HTTP
+error: the evaluation worked and its answer was "block", so the response is a
+200 that carries the attempt and the reasons. Only a request the gate refuses
+(unknown mandate, mandate already in use) or a gate that cannot work gets an
+error status. Error bodies are fixed codes, never the framework's own message,
+because that message can quote what the client sent.
+
+### Where it appears in Ostensia
+apps/api/src/routes/ (respond.ts holds the status mapping), server.ts (the body
+limit and the error handler) and index.ts (startup).
+
+### Why this design was selected
+It keeps every rule in the code that has tests for it, so a route cannot
+accidentally weaken the payment path. A scan test fails if a route file starts
+calling PayPal, evaluating or reading the clock.
+
+### Alternative
+Put checks in the routes (for example "reject if total is too high") or let
+Fastify's schemas do the validation. It was not selected because a second copy of
+a rule can disagree with the domain's, and the domain is the one place rules live.
+
+### Failure case
+The audit log fails while a capture is being announced. The gate stops itself,
+the client gets a fixed 500 with nothing quoted, nothing is sent to PayPal, and
+every later request gets 503 until the process is restarted.
+
+### Evidence
+routes.test.ts (every mapping, the failing log) and routes-boundaries.test.ts.
+
+### Explain it to a judge
+(To be written by the developer.)
+
+### Questions I still cannot answer
+- (To be written by the developer.)
+
+## Topic: A simulated agent is a labelled proposal source, not a shortcut
+
+### Plain-language explanation
+Something has to propose purchases. The simulated shopping agent takes a
+confirmed mandate and a fictional catalogue and builds one proposal for a named
+scenario, such as "over the unit price". It does not decide whether the proposal
+is allowed; the same deterministic evaluator that handles any proposal does. Its
+output says it is simulated, and if a scenario cannot be built from a mandate it
+says so instead of quietly building a different one.
+
+### Where it appears in Ostensia
+apps/api/src/simulation/ (catalogue.ts, scenarios.ts) and routes/simulation.ts.
+The end-to-end run (scripts/e2e-run.ts) uses it.
+
+### Why this design was selected
+It gives reliable compliant and non-compliant proposals without implying a real
+merchant or a real agent (D-012).
+
+### Alternative
+An AI agent that shops real sites. It was not selected because it is large,
+unpredictable and not the product: the gate is.
+
+### Failure case
+A mandate lists only products priced under its limit. "over_unit_price" cannot be
+built, and the route answers 422 with the reason.
+
+### Evidence
+scenarios.test.ts runs every scenario through the real pre-check and checks the
+violation it was built to cause.
+
+### Explain it to a judge
+(To be written by the developer.)
+
+### Questions I still cannot answer
+- (To be written by the developer.)
+
 ## Template for later entries
 
 ## Topic: [Concept]
