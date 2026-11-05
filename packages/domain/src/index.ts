@@ -5,6 +5,7 @@ export const DOMAIN_NAME = "@ostensia/domain";
 
 export * from "./canonical.ts";
 export * from "./decision.ts";
+export * from "./draft.ts";
 export * from "./evaluate.ts";
 export * from "./explain.ts";
 export * from "./mandate.ts";

@@ -1,8 +1,10 @@
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import { DOMAIN_NAME } from "@ostensia/domain";
+import type { MandateDrafter } from "./ai/drafter.ts";
 import type { Gate } from "./gate/gate.ts";
 import { registerAttemptRoutes } from "./routes/attempts.ts";
+import { registerDraftRoutes } from "./routes/draft.ts";
 import { registerMandateRoutes } from "./routes/mandates.ts";
 import { sendError } from "./routes/respond.ts";
 import { registerSimulationRoutes } from "./routes/simulation.ts";
@@ -10,6 +12,9 @@ import { registerSimulationRoutes } from "./routes/simulation.ts";
 export type BuildServerOptions = {
   readonly logger: boolean;
   readonly gate: Gate;
+  // Optional: without a drafter the draft route answers 503 (D-024).
+  readonly drafter?: MandateDrafter | null;
+  readonly now?: () => Date;
 };
 
 // Requests are small JSON documents; anything larger is refused.
@@ -42,6 +47,7 @@ export function buildServer(options: BuildServerOptions): FastifyInstance {
   // workspace link works at runtime (D-002).
   app.get("/health", async () => ({ status: "ok", domain: DOMAIN_NAME }));
 
+  registerDraftRoutes(app, options.drafter ?? null, options.now ?? (() => new Date()));
   registerMandateRoutes(app, options.gate);
   registerAttemptRoutes(app, options.gate);
   registerSimulationRoutes(app, options.gate);
