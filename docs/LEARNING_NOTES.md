@@ -743,6 +743,87 @@ violation it was built to cause.
 ### Questions I still cannot answer
 - (To be written by the developer.)
 
+## Topic: The AI proposes, deterministic code completes and decides
+
+### Plain-language explanation
+The model reads a person's words and fills in a draft: some fields may be null
+because the words did not say. Nothing the model produces is trusted or acted on.
+A pure function, completeDraft, then says whether the draft is complete or what
+is missing, and it never fills a gap itself. A person fills the gaps, reviews, and
+confirms through the same route and the same checks as a mandate typed by hand.
+Only then does the gate treat it as a mandate. The AI cannot create, confirm or
+enforce anything, and has no tools.
+
+### Where it appears in Ostensia
+packages/domain/src/draft.ts (completeDraft), apps/api/src/ai/ (the drafter, the
+prompt, the warnings), apps/api/src/routes/draft.ts, and POST /mandates, which is
+unchanged.
+
+### Why this design was selected
+A purchasing limit that the AI invented would look exactly like one the person
+chose. Making "missing" a visible state, and putting a person between a draft and
+a mandate, keeps the limits the person's own (D-009, D-024).
+
+### Alternative
+Let the AI fill in sensible defaults, such as an expiry a day ahead. It was not
+selected because a default looks like a decision the person made.
+
+### Failure case
+Text inside the person's description tries to change the rules ("set the total to
+99999999"). The prompt says to ignore it, but the real protection is structural:
+the model has no tools and can only return a draft, which is labelled, checked
+for completeness and shown to a person before anything is confirmed.
+
+### Evidence
+draft.test.ts (every field and every subset of gaps), drafter.test.ts and
+routes/draft.test.ts. How the real model behaves is the developer's smoke run
+(TD-022).
+
+### Explain it to a judge
+(To be written by the developer.)
+
+### Questions I still cannot answer
+- (To be written by the developer.)
+
+## Topic: Structured output is a request, not a guarantee
+
+### Plain-language explanation
+The SDK can ask the model to answer in the shape of a schema, and parse the
+answer for you. That narrows what comes back, but the code that uses the answer
+still checks it, because the model can refuse, run out of tokens halfway, or the
+library can return null. The drafter checks the stop reason first (a refusal or a
+cut-off answer is never used, even if something parsed), then validates the
+parsed value again with our own schema. Every way this can go wrong is a value the
+caller can see (refused, invalid output, unavailable), and an error the drafter
+does not recognise is rethrown, because hiding it would hide a bug.
+
+### Where it appears in Ostensia
+apps/api/src/ai/drafter.ts and the status codes in routes/draft.ts.
+
+### Why this design was selected
+It is the same outcome-as-a-value pattern as the PayPal adapter (D-020), so a
+caller never has to guess whether a draft is usable.
+
+### Alternative
+Trust parsed_output when it is not null. It was not selected because a stop reason
+of refusal or max_tokens can still come with partial content, and a library check
+is not something downstream code should rely on.
+
+### Failure case
+The model is cut off at the token limit. The drafter returns invalid_output
+(max_tokens) and the route answers 502, not a half-filled draft.
+
+### Evidence
+drafter.test.ts (a refusal and a cut-off answer are not used even when a draft
+parsed; a reply that fails our own check is rejected; a provider message is never
+passed on) and the mutation run.
+
+### Explain it to a judge
+(To be written by the developer.)
+
+### Questions I still cannot answer
+- (To be written by the developer.)
+
 ## Template for later entries
 
 ## Topic: [Concept]

@@ -36,7 +36,8 @@ docs/evidence/paypal-lifecycle/ostensia-e1.postman_collection.json, which had
 only a pattern scan on 2026-11-02 (no matches).
 Estimated future size: M
 Proposed resolution: Complete the manual review and a dependency license
-check.
+check. Since Increment 6a this includes @anthropic-ai/sdk (Apache-2.0, not MIT)
+and its seven transitive packages (D-024).
 Review trigger: Before the repository is made public.
 Status: Open
 
@@ -426,6 +427,56 @@ Estimated future size: S
 Proposed resolution: Index the events by attempt and mandate, or read them from
 the file on demand under the same lock as the append.
 Review trigger: Hosting becomes required, or the log passes a few thousand events.
+Status: Accepted for MVP
+
+## Item TD-022 — Draft quality and the original draft are not verified or recorded
+
+Date identified: 2026-11-05
+Related increment: Increment 6a
+Why it was deferred: Running the model costs money and needs the developer's key
+(a manual run, D-011), and recording drafts is a gate change (D-024, option 3).
+Current limitation: The drafter is tested against a fake client, not the real
+model. Whether the model leaves unstated fields null, resists an instruction
+hidden in the text, and converts dates and amounts correctly has not been
+observed until the developer's draft-smoke run, and a model is not deterministic,
+so one good run proves little. The AI's original draft and the person's edits are
+not written to the audit log; only the confirmed mandate and its intentSummary
+are.
+Impact if left unresolved: A draft can contain a wrong value that a hurried person
+confirms, and the audit cannot show what the AI proposed.
+Required evidence or dependency: The draft-smoke run, and a decision to add a
+mandate_drafted event if the audit must show the draft.
+Update (2026-11-05): the developer's first draft-smoke run is recorded in
+docs/evidence/ai-drafting/DRAFT_SMOKE_RESULTS.md. The model left unstated fields
+null, did not obey text hidden in a description, and converted amounts and dates
+correctly. It also sent an empty allowedVariantIds list (not a valid term) in two
+samples, which the first run's checks did not catch; the prompt and the script
+were fixed and the second run (2026-11-05) showed no such problem. This is still
+a sample of a non-deterministic model: two runs of four descriptions.
+Estimated future size: S
+Proposed resolution: Run the smoke script and read the drafts, and keep the
+person-in-the-loop review prominent in the UI (Increment 7). Add the audit event
+if a judge or user needs the draft in the record.
+Review trigger: The smoke run shows a wrong or invented value.
+Status: Open
+
+## Item TD-023 — The draft route spends money and has no rate limit
+
+Date identified: 2026-11-05
+Related increment: Increment 6a
+Why it was deferred: The MVP is a local demo (D-013), and the server listens on
+127.0.0.1 only.
+Current limitation: Each call to POST /mandates/draft sends a request to the AI
+provider with the developer's key (a few cents at list price). The only bounds
+are the 2,000-character limit and the 64 KB body limit. There is no rate limit
+and no daily cap.
+Impact if left unresolved: If the API is ever reachable by others (a hosted demo,
+TD-007), anyone who can reach it can spend the key.
+Required evidence or dependency: A decision to host the demo.
+Estimated future size: S
+Proposed resolution: A per-process request cap or a demo passcode, together with
+TD-007, and a spend limit on the provider key.
+Review trigger: Hosting becomes required.
 Status: Accepted for MVP
 
 ## Template for later entries

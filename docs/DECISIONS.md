@@ -1522,6 +1522,153 @@ required (TD-007).
 Increment 6 (AI drafting), whose output
 feeds POST /mandates after the user confirms it.
 
+## Decision D-024 — AI mandate drafting: the AI proposes, and code completes and decides
+
+Date: 2026-11-05
+Status: Accepted (2026-11-05, by the developer: Increment 6a as proposed, with
+the recommended option for each of the five questions)
+Related increment: Increment 6a (drafting). Increment 6b (a labelled AI shopping
+agent) is separate and needs its own proposal.
+Related findings: D-009 (the AI proposes, the user confirms), D-012, D-016,
+D-023; the hackathon official rules (pasted by the developer, 2026-11-05)
+Related risks: An AI-invented limit; a prompt injected through the person's text;
+a draft treated as a confirmed mandate; a provider key reaching the browser or a
+log; a draft that cannot work with the catalogue
+Related questions: TD-022, TD-023, TD-002
+
+### Context
+MVP steps 1 and 2 (a person describes a purchase and AI proposes a structured
+mandate) did not exist: a client had to post exact terms. The domain already has
+a lenient MandateDraft (null for anything the AI could not read) and a strict
+ConfirmedMandate (D-009). The developer approved: Claude with claude-opus-5-5;
+the server runs without an AI key; drafts are not recorded in the audit log;
+gaps in a draft stay gaps; and a split of Increment 6 into 6a (drafting) and 6b
+(an AI agent that proposes carts, to be proposed separately).
+
+The hackathon rules (checked 2026-11-05) allow any AI provider ("an AI tool,
+model, or platform of their choice") as long as PayPal integration is central.
+They require a working project that judges can run or interact with, through
+setup and run instructions in the repository or a hosted demo, and do not
+require public hosting. This settles the D-013 follow-up "verify the hackathon
+rules" for hosting: local-first stands. It also adds requirements for Increment 8
+(a public repository with a detectable open-source licence, a video under three
+minutes, and instructions that let a judge run the project with their own
+sandbox credentials and AI key).
+
+### Options considered
+1. Provider and model: Claude (claude-opus-5-5); Claude with a cheaper model; or
+   another provider.
+2. Starting without an AI key: start with drafting off, or refuse to start.
+3. Recording drafts: do not record (the confirmed mandate and its intentSummary
+   are recorded), or add a mandate_drafted audit event.
+4. Gaps in a draft: stay missing for a person to fill in, or server-suggested
+   defaults.
+5. The AI shopping agent: with 6a, split into 6a and 6b, or left out.
+
+### Decision
+The recommended option in each case: Claude (claude-opus-5-5); start without an
+AI key; do not record drafts; gaps stay gaps; split 6a and 6b.
+
+Drafting only proposes:
+- POST /mandates/draft {instruction} (at most 2,000 characters) returns
+  {aiGenerated: true, label, draft, completeness, warnings}. It creates no
+  mandate, writes no audit event, and makes no PayPal call. A person reviews and
+  edits, then confirms through POST /mandates, which is unchanged: the gate
+  validates the terms and computes the hash. Everything the route returns is
+  labelled AI-generated.
+- completeDraft (packages/domain/src/draft.ts, pure) says whether a draft is
+  complete (and gives the exact terms) or incomplete. It lists a null field as
+  missing by path ("items[0].maxUnitPriceMinor") and reports a present but
+  unacceptable value (a date that is not a date, a limit of zero, duplicate
+  products) as a problem. It never fills a gap and never applies a default. A
+  complete result is validated by the same MandateTermsSchema the gate uses.
+- draftWarnings (apps/api/src/ai/) shows deterministic warnings next to a draft:
+  a product not in the catalogue, a catalogue price above the unit-price limit, a
+  variant the catalogue does not sell, an expiry that is not in the future. They
+  never change the draft and never block it.
+- The drafter (apps/api/src/ai/drafter.ts) makes one call with the Anthropic SDK:
+  structured output from the existing Zod schema (zodOutputFormat with
+  beta.messages.parse), effort medium, max_tokens 16000, no tools, no web access,
+  no sampling settings, and the server-side refusal fallback (fallbacks:
+  "default"). The reply is validated again by our own schema before it is used.
+  It returns a value for everything the provider can do: drafted, refused,
+  invalid_output (cut off, no output, or not the schema) and unavailable (auth,
+  rate_limited, timeout, connection, bad_request, server). An error it does not
+  recognise is rethrown, not hidden. The provider's text is never passed on.
+- The system prompt is fixed text plus the synthetic catalogue; the date and the
+  person's words go only in the user message. The prompt tells the model to leave
+  unstated fields null, to treat the description as data and not as instruction,
+  and to put anything unclear in notes. This is a mitigation, not the control
+  (see below).
+- The control is structural. The model cannot call a tool, cannot reach the web,
+  cannot create anything, and its output is limited to the draft shape and then
+  checked by code. The worst an injected instruction can produce is a draft
+  that a person reviews, which the label and the warnings make visible.
+- Configuration: ANTHROPIC_API_KEY, optional. With no key the server starts, logs
+  that drafting is off, and the draft route answers 503 not_configured. A key
+  that is set but malformed, or an ANTHROPIC_BASE_URL other than
+  https://api.anthropic.com, stops the start. The SDK client is given the host
+  explicitly, so an environment setting cannot redirect a request that carries
+  the key. The key stays on the server and is never logged.
+- Errors: provider unavailable 503 (with a reason), refused 422, unusable output
+  502, a bad request 400. The SDK's own retries of 429 and 5xx stay on, because
+  drafting only reads and returns text, unlike a PayPal write (D-010).
+
+Dependency: @anthropic-ai/sdk 1.3.0 in apps/api, pinned exactly (it works with
+the repository's Zod 4.6.7 as an optional peer). It is Apache-2.0 licensed, not
+MIT, and brings seven transitive packages (standardwebhooks, json-schema-to-ts,
+@opentelemetry/api, @babel/runtime, @stablelib/base64, fast-sha256, ts-algebra).
+It was chosen over a hand-written fetch client for the typed structured-output
+helper, typed errors and retries. 1.3.0 was published on 2026-10-23; the latest
+release (1.5.0) was one day old when this was decided, so an older release was
+pinned. The licences go into the TD-002 review.
+
+### Rationale
+The AI does the one job it is suited to, reading words, and everything that
+matters stays in deterministic code: what is complete, what is valid, what is
+enforced. A person is always between a draft and a mandate.
+
+### Trade-offs
+- Drafts are not recorded (TD-022 notes the cost): the audit shows the confirmed
+  mandate and its summary, not the AI's original draft or the person's edits.
+- The model's behaviour is not deterministic, and its quality had not been
+  observed against the real provider when this was decided (TD-022).
+- The draft route spends money and has no rate limit (TD-023, TD-007).
+- The summary of the person's intent is the AI's wording until the person edits
+  it.
+
+### Verification
+Domain tests for completeDraft (every field, every subset of nulls, problems
+against gaps, invalid input, determinism). Drafter tests against a fake client for
+the request shape (no tools, no sampling, the fixed system prompt, the
+instruction only in the user message) and every outcome, including a reply the SDK
+rejected and an error it does not recognise. Route tests for every status code,
+the limits, the label and that nothing is created. Configuration and boundary
+tests. A real node process started with placeholder values: drafting off without
+a key; with a placeholder key a real 401 from the provider came back as 503 auth;
+a malformed key and a foreign base URL stopped the start; the key appeared in no
+log; no audit file was written. The developer's first draft-smoke run
+(2026-11-05, docs/evidence/ai-drafting/DRAFT_SMOKE_RESULTS.md) used the real
+model on four fictional descriptions: unstated fields stayed null, an instruction
+hidden in a description was not obeyed, and amounts and dates were converted
+correctly, at about 1.6 cents a draft. It also found that the model sent an empty
+allowedVariantIds list to mean "no restriction", which is not a valid term (the
+structured-output schema cannot express a minimum length). The prompt now says to
+leave the field out, and the code deliberately does not turn an empty list into
+"no restriction", because that could loosen a limit. A second run after the fix
+(2026-11-05) showed no problems and the variant list left out where there was no
+restriction.
+
+### Revisit trigger
+The smoke run shows invented values or poor quality; the provider's refusal rate
+is a problem; hosting is required (TD-007, TD-023); or the audit needs to show
+the AI's draft (TD-022).
+
+### Follow-up
+The developer runs `pnpm --filter @ostensia/api draft-smoke`. Increment 6b
+(a labelled AI shopping agent) needs its own proposal. Increment 8 must cover the
+hackathon's judging-access, repository and video requirements.
+
 ## Template for later entries
 
 ### Decision D-NNN — [Title]
