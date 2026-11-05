@@ -6,12 +6,12 @@ Last updated: 2026-11-05
 
 ## Status
 
-- **Current increment:** Increment 6a - AI mandate drafting (D-024). The AI
-  proposes a draft from a person's description; pure domain code says what is
-  missing; a person confirms through the unchanged POST /mandates. Implemented
-  and verified against a fake client and a real node process on branch
-  feat/ai-drafting (from main at 959f1b4); the developer's two
-  `draft-smoke` runs against the real model passed (2026-11-05); awaiting the
+- **Current increment:** Increment 6b - the AI shopping agent (D-025). The agent
+  turns a task into a cart; code prices it from the catalogue; the client sends the
+  proposal to POST /attempts, where the gate decides. Implemented and verified
+  against a fake client and a real node process on branch feat/ai-drafting (6a is
+  committed there: b717727, 74cfb9d, not yet pushed or merged); the developer's
+  `agent-smoke` run against the real model passed (2026-11-05); awaiting the
   developer's confirmation and commit authorization.
 - **Passed:**
   - Repository audit (2026-10-29).
@@ -66,6 +66,15 @@ Last updated: 2026-11-05
     wrote nothing to the audit log. That placeholder-key request sent one
     fictional sentence to the provider and nothing else. The real model has not
     been run.
+  - Increment 6a (AI mandate drafting), committed in b717727 and 74cfb9d. The
+    developer's two draft-smoke runs against the real model passed.
+  - Increment 6b checks (2026-11-05), against a fake client (D-011): pnpm test
+    passes (47 files, 1419 tests), pnpm typecheck passes, and 32 of 32 deliberate
+    mutations of the new code were caught. A real node process with placeholder
+    values: no key gave 503 not_configured; a placeholder key drew a real 401 from
+    the provider (503 auth); the key appeared in no log; nothing was written to the
+    audit log. That placeholder-key request sent one fictional sentence to the
+    provider and nothing else. The real model has not been run as a shopper.
 - **Broken:** The spike runner (docs/evidence/spike/scripts/run-spike.js)
   points to countersign-spike.* files and a SPIKE_README.md that do not
   exist (TD-001). The application does not use it.
@@ -109,9 +118,16 @@ Last updated: 2026-11-05
   minutes. Hosting is not required (D-013 stands). Judges would need their own
   PayPal sandbox app and vault id (TD-009) and an AI key; no keys may be
   committed.
-- **Next approved task:** None. Increment 6b (a labelled AI shopping agent that
-  proposes carts) needs its own proposal and approval.
-- **Next comprehension gate:** Increment 6a walkthrough.
+- **Agent smoke run, Increment 6b (done 2026-11-05 by the developer):** six
+  fictional tasks against the real model, pre-check only, no PayPal and no
+  attempts. The informed agent stayed within the limits (or declined) in all four
+  runs; the uninformed agent exceeded them in both runs and the pre-check blocked
+  both; the hidden instruction was not obeyed; about 1 cent a call. One sample of
+  a non-deterministic model (TD-025). Evidence:
+  docs/evidence/ai-drafting/AGENT_SMOKE_RESULTS.md.
+- **Next approved task:** None. Increment 7 (the UI) and Increment 8 (demo
+  hardening) each need their own proposal and approval.
+- **Next comprehension gate:** Increment 6b walkthrough.
 
 ## Evidence gates
 
@@ -153,8 +169,8 @@ Each increment needs separate approval.
 | 4 | Capture and void in the adapter, and the sandbox lifecycle run | Complete (e5ae3b4, 07ad473; merged in 27edf3d); the developer's `smoke --lifecycle` run passed every step (R2, R3 closed; E-1 closed) |
 | 5a | Gate core: mandates, attempts, audit log, authorize, settle, reconcile (no HTTP) | Complete (6fcfced, 5a40d0f); on feat/gate-store-and-api, not yet pushed |
 | 5b | Routes, synthetic catalogue, simulated-agent scenarios, end-to-end sandbox run | Complete (797652d, 6693e8a; merged in 959f1b4); the developer's `e2e` sandbox run passed every step |
-| 6a | AI mandate drafting: draft route, completeness check, warnings (Claude, D-024) | Implemented; the developer's two `draft-smoke` runs against the real model passed; awaiting commit |
-| 6b | A labelled AI shopping agent that proposes carts, checked by the same deterministic gate | Not started; needs its own proposal |
+| 6a | AI mandate drafting: draft route, completeness check, warnings (Claude, D-024) | Complete (b717727, 74cfb9d); the developer's two `draft-smoke` runs against the real model passed |
+| 6b | A labelled AI shopping agent that proposes carts, checked by the same deterministic gate (D-025) | Implemented; the developer's `agent-smoke` run against the real model passed; awaiting commit |
 | 7 | Next.js frontend | Not started |
 | 8 | Demo hardening and publication review | Not started |
 

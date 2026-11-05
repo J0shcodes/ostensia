@@ -1669,6 +1669,135 @@ The developer runs `pnpm --filter @ostensia/api draft-smoke`. Increment 6b
 (a labelled AI shopping agent) needs its own proposal. Increment 8 must cover the
 hackathon's judging-access, repository and video requirements.
 
+## Decision D-025 — The AI shopping agent: it proposes a cart, the shop prices it, the gate decides
+
+Date: 2026-11-05
+Status: Accepted (2026-11-05, by the developer: Increment 6b as proposed, with
+the recommended option for each of the four questions)
+Related increment: Increment 6b
+Related findings: D-007, D-012, D-022, D-023, D-024; the hackathon judging
+criteria ("Technological Implementation" and the "Best Use of PayPal + AI" and
+"Best Use of Agentic Commerce" honorable mentions)
+Related risks: An AI that states its own prices; an agent treated as an authority;
+a simulation that looks like a real merchant; a prompt injected through the task
+Related questions: TD-024, TD-025
+
+### Context
+The product is a gate for AI purchasing, but until now no AI purchased anything in
+the demo: the simulated agent (D-012) is deterministic code that builds six fixed
+scenarios. 6b adds an AI agent that turns a task into a cart, so the demo can show
+a real AI proposing and the same deterministic gate allowing or blocking it. The
+developer chose: a labelled `mode` on each request (informed or uninformed);
+propose only, with the client submitting the cart; no audit event for the agent's
+reasoning; and a smoke run that evaluates carts with the pre-check only.
+
+### Options considered
+1. What the agent sees: the task and the mandate's limits; the task only; or a
+   labelled mode that chooses between them.
+2. Autonomy: propose only, or a route that also runs the gate.
+3. The agent's reasoning: not recorded in the audit log, or a new event.
+4. Verification: a pre-check-only smoke run, or also a full sandbox run.
+
+### Decision
+The recommended option in each case: a labelled `mode`; propose only; do not
+record the reasoning; a pre-check-only smoke run.
+
+- POST /mandates/:id/agent-proposal {mode, task?} returns {aiGenerated: true,
+  simulatedShop: true, label, mode, modeNote, proposal | null, declined | null,
+  rationale}. With no task, the agent shops for the mandate's intentSummary (at
+  most 2,000 characters otherwise). The route creates no attempt, writes no audit
+  event and makes no PayPal call. The client sends the proposal to POST /attempts
+  like any other proposal, where the gate decides.
+- `informed` mode shows the agent the mandate's limits (it shows that even a
+  well-behaved agent is checked); `uninformed` withholds them (it shows the gate
+  stopping an agent that does not know the buyer's policy). The response says
+  which, in words. The uninformed request contains no limit at all (tested).
+- The agent (apps/api/src/ai/shopper.ts) makes one call, like the drafter
+  (D-024): claude-opus-5-5, effort medium, structured output, no tools, no web
+  access, no sampling settings, the refusal fallback, and its reply checked again
+  by our own schema. It chooses productId, variantId and quantity from the
+  synthetic catalogue, and explains the choice. It never states a price.
+- The cart becomes a PurchaseProposal in plain code (cart.ts): every unit price
+  and the total come from the catalogue, so an agent cannot misstate an amount. A
+  cart that does not fit the shop (an unknown product, a variant of another
+  product, an empty cart, a bad quantity) is invalid and is never corrected: the
+  route answers 502.
+- An agent that buys nothing returns a decline with its reason and no proposal
+  (200). A cart that comes with a reason for buying nothing contradicts itself and
+  is not used. The other outcomes are as for drafting: refused 422, unusable
+  output 502, provider unavailable 503 with a reason, and 503 not_configured when
+  there is no key. The provider's error handling is shared with the drafter
+  (provider-errors.ts).
+- Startup creates one SDK client and gives it to both the drafter and the agent.
+  With no ANTHROPIC_API_KEY both routes answer 503 and the deterministic scenarios
+  (D-023) still work.
+- The structural controls are those of D-024: no tools, no web access, output
+  limited to a cart shape that code then checks, and a gate that evaluates every
+  proposal deterministically. The agent has no authority: a cart is only a
+  proposal.
+- `pnpm --filter @ostensia/api agent-smoke` (run by the developer) gives the agent
+  six fictional tasks against one in-memory mandate and prints each cart, the
+  agent's explanation and the pre-check's decision. It makes no PayPal call and
+  creates no attempt. About ten cents at list price.
+
+A finding while building it (TD-024): SDK 1.3.0 sends an enum or const in a
+structured-output schema to the API as description text, not as a constraint. The
+API therefore does not enforce the product and variant lists (nor the drafter's
+currency): our own validation does, and a reply that names something the shop does
+not have is returned as invalid_output. This is a reliability cost, not a safety
+one, and it corrects the impression in D-024 that the API limits the output to the
+draft shape: the API enforces types and required fields, and our code enforces the
+rest.
+
+### Rationale
+It shows the product's thesis directly (a real AI proposes, the gate decides) at
+small cost, because the gate, the pricing and the evaluation already exist. The AI
+stays advisory: it cannot set a price, create an attempt or call PayPal.
+
+### Trade-offs
+- The agent is not deterministic. An uninformed agent may stay within the limits on
+  a given run, so a guaranteed block in the video should use a deterministic
+  scenario (D-023) (TD-025).
+- The agent's explanation is its own wording and is not verified; it is shown
+  labelled. It is not recorded in the audit log, so the audit shows the proposal
+  and the gate's decision, not why the agent chose the cart (TD-025).
+- The agent draws on the same key as drafting, and the same cost and rate-limit
+  concerns apply (TD-023).
+- Prices are the catalogue's, so the agent cannot be tested for price mistakes: it
+  cannot make one.
+
+### Verification
+Tests (47 files, 1419 tests): the cart builder (prices only from the catalogue,
+an agent's own price ignored, every invalid cart, no correction); the agent against
+a fake client (the request shape with no tools and no sampling, the fixed prompt per
+mode, the limits shown to an informed agent and absent from an uninformed request,
+every outcome, a reply the SDK rejected, an error it does not recognise); the
+prompts; the route (every status code, the labels, the limits on the task, that
+nothing is created, and a cart the real gate captures and one it blocks before
+PayPal, on the stub adapter); and boundary scans (the agent and the drafter are the
+only callers of the provider, neither reaches the gate or PayPal, the model gets no
+tools). 32 of 32 deliberate mutations of the new code were caught. A real node
+process with placeholder values: no key gave 503 not_configured; a placeholder key
+drew a real 401 from the provider, answered 503 auth; the key appeared in no log
+and nothing was written to the audit log. The developer's agent-smoke run (2026-11-05,
+docs/evidence/ai-drafting/AGENT_SMOKE_RESULTS.md) used the real model on six
+fictional tasks, with the pre-check only: the informed agent stayed within the
+limits (or declined, naming the limits) in all four informed runs; the uninformed
+agent exceeded them in both uninformed runs and the pre-check blocked both; the
+instruction hidden in a task was not obeyed; about 1 cent a call. It is one sample
+of a non-deterministic model (TD-025).
+
+### Revisit trigger
+The smoke run shows an agent that obeys text hidden in a task, misreads a limit
+badly, or names things outside the catalogue often (TD-024); or the demo needs the
+agent's reasoning in the audit (TD-025).
+
+### Follow-up
+The developer runs `pnpm --filter @ostensia/api agent-smoke` and the output goes
+under docs/evidence/ai-drafting/. Then Increment 7 (the UI), which calls these
+routes, and Increment 8 (demo hardening, with the hackathon's judging-access,
+repository and video requirements).
+
 ## Template for later entries
 
 ### Decision D-NNN — [Title]

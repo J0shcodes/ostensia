@@ -466,7 +466,8 @@ Date identified: 2026-11-05
 Related increment: Increment 6a
 Why it was deferred: The MVP is a local demo (D-013), and the server listens on
 127.0.0.1 only.
-Current limitation: Each call to POST /mandates/draft sends a request to the AI
+Current limitation: Each call to POST /mandates/draft (and, since Increment 6b,
+POST /mandates/:id/agent-proposal) sends a request to the AI
 provider with the developer's key (a few cents at list price). The only bounds
 are the 2,000-character limit and the 64 KB body limit. There is no rate limit
 and no daily cap.
@@ -477,6 +478,59 @@ Estimated future size: S
 Proposed resolution: A per-process request cap or a demo passcode, together with
 TD-007, and a spend limit on the provider key.
 Review trigger: Hosting becomes required.
+Status: Accepted for MVP
+
+## Item TD-024 — The SDK sends enum and const constraints as description text
+
+Date identified: 2026-11-05
+Related increment: Increment 6b (also affects 6a)
+Why it was deferred: It was found while testing the agent's schema. Working around
+it means building the output format by hand instead of using the SDK's Zod helper.
+Current limitation: With @anthropic-ai/sdk 1.3.0, the Zod helper (zodOutputFormat)
+keeps only a few JSON Schema keywords (type, properties, required, items, anyOf,
+and some formats) and puts everything else into the description text, including
+`enum` and `const`. The product and variant lists of the shopping agent, and the
+drafter's `currency: "USD"`, reach the model as a hint, not as a constraint the API
+enforces. (Minimum and maximum lengths and values were already known to be
+removed, D-024.)
+Impact if left unresolved: The model can name a product, variant or currency that
+the shop does not have. Our own validation rejects it (invalid_output, a 502), so
+nothing wrong is used, but the request fails instead of being constrained to a
+valid answer. The two smoke runs of the drafter and the first agent runs showed no
+such reply.
+Required evidence or dependency: A newer SDK that keeps enum, or building the
+output format by hand (z.toJSONSchema, without the SDK's transform).
+Estimated future size: S
+Proposed resolution: Check whether a newer SDK release keeps enum and const; if
+not, send the schema without the SDK's transform and parse the reply with our own
+schema (the code already does the second step).
+Review trigger: A smoke run or a demo shows an invalid_output for an out-of-catalogue
+id.
+Status: Accepted for MVP
+
+## Item TD-025 — The AI agent's outcomes are not guaranteed, and its reasoning is not recorded
+
+Date identified: 2026-11-05
+Related increment: Increment 6b
+Why it was deferred: A model is not deterministic, and recording the reasoning is a
+gate change (D-025, option 3).
+Current limitation: Whether an uninformed agent exceeds the limits, or an informed
+agent stays within them, varies by run. Its explanation is its own wording and is
+unverified. Neither the explanation nor the cart's origin is written to the audit
+log; the audit shows the attempt, its proposal and the gate's decision.
+Update (2026-11-05): the developer's first agent-smoke run
+(docs/evidence/ai-drafting/AGENT_SMOKE_RESULTS.md) showed an informed agent within
+the limits in all four runs and an uninformed agent over the limits in both runs,
+blocked by the pre-check. That is one sample; the point stands.
+Impact if left unresolved: A demo that depends on the AI agent being blocked can
+fail to show a block, and the audit cannot show which proposals came from the AI.
+Required evidence or dependency: The developer's agent-smoke run, and a decision to
+add an audit event if the audit must show an AI-originated proposal.
+Estimated future size: S
+Proposed resolution: For a guaranteed block in the video, use a deterministic
+scenario (D-023). Label every AI proposal in the UI (Increment 7). Add an event
+that marks a proposal as AI-originated if a judge needs it in the record.
+Review trigger: The smoke run, or the video script.
 Status: Accepted for MVP
 
 ## Template for later entries
