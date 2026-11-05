@@ -20,6 +20,9 @@ coverage/
 **/*postman*environment*.json
 !docs/evidence/spike/postman-environment.example.json
 
+# The gate's audit log and the end-to-end run's logs (D-008)
+data/
+
 # Logs and local IDE/OS files
 *.log
 .DS_Store

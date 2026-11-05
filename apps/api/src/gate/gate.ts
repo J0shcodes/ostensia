@@ -75,6 +75,8 @@ export type Gate = {
   listMandates(): ConfirmedMandate[];
   getAttempt(attemptId: string): Attempt | null;
   listAttempts(): Attempt[];
+  // The audit events recorded for one attempt, oldest first.
+  eventsFor(attemptId: string): AuditEvent[];
   authorize(input: AuthorizeInput): Promise<AttemptResult>;
   settle(attemptId: string): Promise<SettleResult>;
   // authorize, then settle if the attempt reached "authorized".
@@ -152,7 +154,13 @@ export async function createGate(options: GateOptions): Promise<Gate> {
 
   const { events, warnings } = await audit.readAll();
   const state = emptyState();
-  for (const event of events) applyEvent(state, event);
+  // Every event applied to the state, in order, so a caller can show the record
+  // of an attempt without reading the file again while the gate may be appending.
+  const history: AuditEvent[] = [];
+  for (const event of events) {
+    applyEvent(state, event);
+    history.push(event);
+  }
   finalizeReplay(state);
 
   const mutex = createKeyedMutex();
@@ -166,6 +174,7 @@ export async function createGate(options: GateOptions): Promise<Gate> {
     try {
       await audit.append(event);
       applyEvent(state, event);
+      history.push(event);
     } catch (error) {
       faulted = true;
       throw error;
@@ -485,6 +494,8 @@ export async function createGate(options: GateOptions): Promise<Gate> {
       return attempt === undefined ? null : clone(attempt);
     },
     listAttempts: () => [...state.attempts.values()].map(clone),
+    eventsFor: (attemptId) =>
+      history.filter((event) => "attemptId" in event && event.attemptId === attemptId).map(clone),
     authorize,
     settle,
     run,

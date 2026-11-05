@@ -4,6 +4,9 @@ export type Config = {
   readonly nodeEnv: NodeEnv;
   readonly port: number;
   readonly host: "127.0.0.1";
+  // Where the gate's append-only audit log lives (D-008). Relative paths are
+  // resolved against the directory the process starts in.
+  readonly auditLogPath: string;
 };
 
 // Messages name the variable and the rule, never the rejected value, so a
@@ -14,6 +17,8 @@ export class ConfigError extends Error {
 
 const NODE_ENVS: readonly NodeEnv[] = ["development", "test", "production"];
 const DEFAULT_PORT = 4000;
+const DEFAULT_AUDIT_LOG_PATH = "data/audit.jsonl";
+const MAX_PATH_LENGTH = 512;
 
 function isNodeEnv(value: string): value is NodeEnv {
   return (NODE_ENVS as readonly string[]).includes(value);
@@ -39,5 +44,14 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): C
     }
   }
 
-  return { nodeEnv, port, host: "127.0.0.1" };
+  const rawPath = env["AUDIT_LOG_PATH"];
+  let auditLogPath = DEFAULT_AUDIT_LOG_PATH;
+  if (rawPath !== undefined && rawPath !== "") {
+    if (rawPath.length > MAX_PATH_LENGTH || rawPath.includes("\u0000") || rawPath.trim() !== rawPath) {
+      throw new ConfigError("AUDIT_LOG_PATH must be a file path of at most 512 characters, with no surrounding whitespace.");
+    }
+    auditLogPath = rawPath;
+  }
+
+  return { nodeEnv, port, host: "127.0.0.1", auditLogPath };
 }
