@@ -905,6 +905,84 @@ each rejected) and the schema test that shows the ids are sent as description te
 ### Questions I still cannot answer
 - (To be written by the developer.)
 
+## Topic: A request that did not come back is not a request that failed
+
+### Plain-language explanation
+Between the browser and the API there is now a middle step: the Next.js server forwards
+each /api request. That step can give up on its own. Observed: after 30 seconds it stops
+waiting and answers a plain-text "Internal Server Error", and it does the same when the API
+is down. The API may still be working on the request. So from the page's side "no answer"
+means "unknown", not "no". For a read (a draft) that is harmless: ask again. For a write
+that makes something new each time (creating a mandate gives it a new id), asking again can
+make a second one. So the page does not retry on its own. It asks the API what exists, shows
+any mandate with exactly the same terms, and lets the person choose.
+
+### Where it appears in Ostensia
+apps/web/lib/api.ts (the three outcomes, and non-JSON server errors read as "unreachable"),
+apps/web/lib/mandate-match.ts, components/confirm-outcome.tsx and mandate-screen.tsx (the
+"could not confirm" flow), next.config.ts (the proxy timeout), D-027 and D-029, TD-031.
+
+### Why this design was selected
+CLAUDE.md section 7 says a timeout does not mean an operation failed, and the gate already
+treats an unanswered PayPal write as "unknown" and never "failed". The page follows the same
+rule one layer up.
+
+### Alternative
+Retry automatically, or disable the button after any error. Automatic retry can create a
+duplicate; disabling leaves the person stuck. Neither was selected.
+
+### Failure case
+A mandate is created but the reply is lost. The page reports that it could not confirm,
+finds the mandate, and offers "Use this mandate". One mandate exists, not two.
+
+### Evidence
+api.test.ts (a plain-text 500 is "unreachable"; the API's own JSON 500 is not; no retry),
+mandate-match.test.ts, and the browser run in docs/evidence/frontend/MANDATE_WALKTHROUGH.md
+("reply lost" and "request lost" scenarios, with the POST and mandate counts).
+
+### Explain it to a judge
+(To be written by the developer.)
+
+### Questions I still cannot answer
+- (To be written by the developer.)
+
+## Topic: One schema in the gate and in the browser
+
+### Plain-language explanation
+The form needs to say "that quantity is too large" before anything is sent. Writing those
+limits again in the web app would give two copies that drift apart. Instead the form turns
+what was typed into values and then runs the domain's own MandateTermsSchema, the schema the
+gate uses. The messages quote the numbers the schema reports, so there is no copied limit.
+This is only for the person's convenience: the gate checks everything again and decides.
+It costs about 31 KB of compressed JavaScript in the browser, which was measured.
+
+### Where it appears in Ostensia
+apps/web/lib/mandate-form.ts (validateForm), apps/web/web-boundaries.test.ts (only four
+values may be imported from the domain at run time), D-028 (D1) and D-029.
+
+### Why this design was selected
+A form that accepts something the gate then refuses is a worse experience than one that
+agrees with the gate, and a copied rule is a bug waiting for the next change to the original.
+
+### Alternative
+Type-only imports and a hand-written copy of the rules, or a new API endpoint that publishes
+the limits. The first duplicates rules; the second changes the backend.
+
+### Failure case
+The domain adds a rule the messages do not explain. The form still refuses the value and shows
+"This value is not accepted", rather than letting it through.
+
+### Evidence
+mandate-form.test.ts (limits are read from the schema: the quantity, item count, summary
+length and minimum amounts), and the deliberate mutation that removed the schema call, which
+the tests caught.
+
+### Explain it to a judge
+(To be written by the developer.)
+
+### Questions I still cannot answer
+- (To be written by the developer.)
+
 ## Template for later entries
 
 ## Topic: [Concept]

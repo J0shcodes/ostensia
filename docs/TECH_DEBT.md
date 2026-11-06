@@ -597,6 +597,95 @@ PayPal's"; update if documentation is found.
 Review trigger: Documentation found, or a production plan.
 Status: Accepted for MVP
 
+## Item TD-030 — The web app has no automated component tests
+
+Date identified: 2026-11-06
+Related increment: Increment 7a
+Why it was deferred: Rendering components in a test needs React Testing Library and a DOM
+environment (jsdom or similar), which are new dependencies the developer did not approve
+(Increment 7 plan, decision 4). The logic is in plain modules under apps/web/lib and is tested.
+Current limitation: Nothing automated renders a component or clicks a button. The components
+are covered by the type checker, by scan tests (apps/web/web-boundaries.test.ts and
+brand.test.ts), by a production build, and by a browser run. The browser run in
+docs/evidence/frontend/MANDATE_WALKTHROUGH.md was a script kept outside the repository, so
+it cannot be repeated from a clone.
+Impact if left unresolved: A change to a component can break behaviour that no test notices,
+for example focus handling, the unclear-confirmation flow or the draft panel.
+Required evidence or dependency: A decision to add a test renderer, or to add the browser
+script (and a browser dependency) to the repository.
+Estimated future size: M
+Proposed resolution: After the hackathon, either add a component test setup, or add the
+DevTools walkthrough as a script with its fault-injecting forwarder. Until then, repeat the
+walkthrough by hand after any change to apps/web/components.
+Review trigger: Any change to apps/web/components; Increment 7b.
+Status: Accepted for MVP
+
+## Item TD-031 — The proxy timeout is experimental and the AI latency it must cover is unmeasured
+
+Date identified: 2026-11-06
+Related increment: Increment 7a (D-027, D-029)
+Why it was deferred: AI latency was never measured (Report 00 L12), and the real draft route
+needs the developer's key.
+Current limitation: apps/web/next.config.ts sets experimental.proxyTimeout to 120000 ms because
+Next.js cuts a proxied request at 30 s by default and answers a plain-text 500 (observed:
+30.04 s). 120 s is a placeholder. The option is under `experimental`, so a Next.js upgrade may
+change it. A proxy cut-off does not cancel the request at the API. The page client stops
+waiting at 150 s. The API sets a 90 s timeout on its Anthropic client (apps/api/src/index.ts).
+(An earlier version of this item said the API set none; that was wrong.) Measured so far: one
+real draft took 16 to 18 s or 5 to 10 s (the developer gave both figures, 2026-11-06). One earlier attempt on a poor
+connection ended with the API's provider-timeout message, which the developer recalls at about
+30 s; that does not match the 90 s setting and is unexplained.
+Impact if left unresolved: A draft or agent call slower than 120 s is reported as unreachable
+although the API may still finish it. A Next.js upgrade could silently restore the 30 s limit.
+Required evidence or dependency: One timed real draft (checklist item B in
+docs/evidence/frontend/MANDATE_WALKTHROUGH.md), and later the agent route.
+Estimated future size: S
+Proposed resolution: Record the measured time; set the timeout from it; keep Next.js pinned and
+check this option on every upgrade (a scan test already requires a value above 30 s).
+Review trigger: The developer's timed draft, a Next.js upgrade, or Increment 7b's agent call.
+Status: Open
+
+## Item TD-032 — The first build of the web app needs internet access for its fonts
+
+Date identified: 2026-11-06
+Related increment: Increment 7a (D-029); Increment 8 (README)
+Why it was deferred: next/font/google is the approved mechanism (D-028, D2). Committing the
+font files (next/font/local) would add binaries and the SIL OFL text to the repository.
+Current limitation: Next.js downloads IBM Plex from Google when it builds. With the network
+reachable, three of four builds in the spike and the repository passed; one build failed once
+(its error text was not captured, so the cause is unknown). A rebuild with an existing .next
+folder works offline; a clean build with no network fails ("Failed to fetch IBM Plex Sans from
+Google Fonts"). The built app serves the fonts itself and the browser contacts no third party.
+Impact if left unresolved: A judge's or the developer's first `build` or `dev` can fail on a
+network problem, including on recording day.
+Required evidence or dependency: None to document; a decision to switch to local font files.
+Estimated future size: S
+Proposed resolution: The README says the first build needs internet and to build once before
+recording or submitting. If it proves unreliable, switch to next/font/local with committed
+woff2 files and their licence text.
+Review trigger: Increment 8 (README), or any build failure naming Google Fonts.
+Status: Accepted for MVP
+
+## Item TD-033 — The web app copies one limit from the API
+
+Date identified: 2026-11-06
+Related increment: Increment 7a
+Why it was deferred: The description limit is a constant in apps/api/src/routes/draft.ts
+(MAX_INSTRUCTION_LENGTH = 2000). The web app may not import from apps/api, and the domain
+does not hold it.
+Current limitation: apps/web/lib/messages.ts repeats 2000 for the counter and the field's
+maxLength. The server enforces its own limit and answers 400 invalid_request if the two ever
+differ, so nothing is unsafe. Every limit that lives in the domain is read from the domain's
+schema and not copied.
+Impact if left unresolved: If the API's limit changes, the counter shows the old number until
+someone updates it.
+Required evidence or dependency: None.
+Estimated future size: S
+Proposed resolution: Move the constant into the domain package, or expose it from the API,
+when either is next changed.
+Review trigger: Any change to the draft route's limit.
+Status: Accepted for MVP
+
 ## Template for later entries
 
 ## Item TD-NNN — [Title]

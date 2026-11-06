@@ -2009,6 +2009,132 @@ decision to add dark mode.
 ### Follow-up
 CLAUDE.md section 14 requires reading the guidelines before frontend work.
 
+## Decision D-029 — The web app: stack, dependencies, and what the browser can see
+
+Date: 2026-11-06
+Status: Accepted (developer approval, 2026-11-06, after the developer's own walkthrough).
+The plan it follows was approved on 2026-11-06 (Increment 7a as proposed, the recommended
+option for A1 to A7, the pinned versions, and the runtime import of MandateTermsSchema
+subject to verification). This record adds what the build and the browser runs showed.
+Related increment: Increment 7a (scaffold, the D-027 rewrite, the mandate screen)
+Related findings: D-006, D-026, D-027, D-028; docs/design/OSTENSIA_BRAND_GUIDELINES.md;
+docs/evidence/frontend/MANDATE_WALKTHROUGH.md; Reports 03, 04 and 06 in
+docs/research/mid-build-validation/
+Related risks: A proxy cutting off a slow AI call; a configuration value reaching the
+browser; client-side limits drifting from the gate's; a mandate created twice; a
+dependency added without need
+
+### Context
+Increment 7a builds the first screen. D-027 chose a Next.js rewrite, and D-028 chose the
+identity and approved running the domain's MandateTermsSchema in the browser, subject to
+verification. A spike in a scratch workspace (2026-11-06) and the build itself established
+facts that were not known when those were decided.
+
+### Options considered
+1. The proposed arrangement: Next.js 16.4.5 with a rewrite, the narrow runtime domain
+   import, plain CSS, next/font, a tested pure `lib/`, and scan tests that enforce the
+   boundaries.
+   - Benefits: no CORS, no new backend code, the limits are not copied, every rule is
+     checked by a test.
+   - Costs/risks: about 110 KB (31 KB gzip) of the client bundle is the schema; the proxy
+     option is experimental; the first build needs internet for fonts.
+2. Direct browser calls with CORS, type-only domain imports, or a component library.
+   Rejected in D-027, D-028 and the Increment 7 plan.
+
+### Decision
+Option 1.
+- Dependencies in apps/web, all pinned exactly and all MIT: next 16.4.5 (3 Nov 2026; its
+  release notes list seven moderate advisories, none in features used here), react and
+  react-dom 19.3.1, @types/react and @types/react-dom 19.3.0, @types/node 24.19.2 (the
+  version apps/api already uses). The registry showed none deprecated and `latest` equal to
+  each pin, and `pnpm audit` on the repository lockfile found no known vulnerabilities.
+  Next's optional `sharp` (image optimisation) entered the lockfile and is unused. No
+  other package was added: no UI, state, data-fetching, CSS, icon or test-rendering library.
+- The rewrite: next.config.ts forwards /api/:path* to API_ORIGIN, parsed by api-origin.ts
+  (exactly http://127.0.0.1:<port>, a port from 1 to 65535, nothing else; the error
+  message never prints the value). `transpilePackages` is not needed: Turbopack compiles a
+  TypeScript workspace package on its own, and the build passed without it.
+- `experimental.proxyTimeout` is set to 120000 ms. Next.js proxies a rewrite with a 30 s
+  timeout and then answers a plain-text 500 (observed: a 40 s upstream was cut at 30.04 s;
+  with the option it completed at 40.02 s). 120 s is a placeholder until real AI latency is
+  measured (TD-031). The option is experimental, which is why Next.js is pinned.
+- The API origin is read when next.config.ts loads. `next build` writes it into
+  .next/routes-manifest.json (a server-side file), so it must be set before building;
+  `next dev` reads it at startup.
+- The runtime import of the domain (D1) is a deliberate exception to the type-only
+  approach, limited to four values: MandateTermsSchema, ConfirmedMandateSchema, formatUsd
+  and canonicalize. A scan test fails if any other value is imported. Verified: the
+  dependency graph is zod and the domain's own files; the build compiles the package; the
+  schema adds about 110 KB raw (31 KB gzip) to the client; unrelated domain modules (payment
+  actions, PayPal statuses, explanations) are tree-shaken out. The gate stays authoritative.
+- Validation is in two stages. Typed text becomes values (money by string arithmetic, local
+  time to UTC with a round-trip check), then the domain schema judges the values. Messages
+  quote the numbers the schema reports; no limit is copied. The one limit that is copied is
+  the API's 2,000-character description length (apps/api/src/routes/draft.ts), because it
+  is not exported anywhere the web app may import (TD-033).
+- API results have three outcomes: ok, an error the API sent (always JSON), and unreachable.
+  A server error that is not JSON is the proxy giving up, and is reported as unreachable.
+  Nothing is retried by the client.
+- Creating a mandate is not idempotent (each POST makes a new id), so when a confirmation
+  does not come back, the page lists the mandates and shows any with exactly the same
+  terms and summary, and the person chooses. A timeout is not a failure (CLAUDE.md section 7).
+- Fonts: IBM Plex Sans and Mono through next/font/google. The files are downloaded when the
+  app is built and served by the app; the browser makes no request to Google. The first
+  build or dev start needs internet; a rebuild with an existing .next does not; a clean build
+  with no network fails (TD-032).
+- Styling: tokens as CSS variables in app/globals.css, component styles as CSS Modules,
+  no raw colour outside globals.css. A test compares the tokens, spacing, radii, sizes and
+  the approved interface strings with the guidelines document, and recomputes contrast.
+
+### Rationale
+It is the smallest arrangement that meets D-026 to D-028 and keeps every rule checkable.
+Reading the build and driving the real stack showed what each decision costs.
+
+### Trade-offs
+- The browser carries the schema (31 KB gzip) so that the form and the gate agree.
+- Every API call passes through the Next.js server, whose proxy timeout is an experimental
+  setting.
+- No automated component tests (TD-030). Logic lives in `lib/` and is tested; components are
+  checked by build, scan tests and a browser walkthrough.
+- A confirmation with no clear answer needs a decision from the person.
+
+### Verification
+Checks of 2026-11-06 (details in docs/evidence/frontend/MANDATE_WALKTHROUGH.md):
+- pnpm test: 56 files, 1686 tests pass (267 new). pnpm typecheck passes. 41 of 41 deliberate
+  mutations of the new logic and scan tests were caught.
+- D-027 criteria: (1) every browser request is a same-origin /api path (scan test, and the
+  network log of a real browser run); (2) the API origin value is in no browser-delivered
+  asset and no NEXT_PUBLIC_ variable exists (build scan and test); (3) GET /api/health, the
+  catalogue, a draft refusal, a created mandate and a refusal all reached the real Fastify
+  API through the rewrite; (4) a 40 s response completed through the rewrite; the developer
+  then timed the real draft route once, with a real key: about 16 to 18 s as told to the
+  assistant, "about 5-10 seconds" as written in the checklist (unreconciled; either is well
+  under 120 s; one sample, not a distribution; 120 s remains a placeholder, TD-031);
+  (5) with the API stopped the page says "Ostensia API unreachable" and shows no address,
+  port or trace; (6) no CORS package, no CORS header, and no direct connection to Fastify.
+- D-026 verification 2 (no Anthropic key): the manual path confirmed a mandate in a headless
+  browser against the real API with no key. The developer then repeated it by hand (checklist
+  section A) with no problems. Verification 1 (a clean clone) waits for the README.
+- The developer's walkthrough (2026-11-06, checklist sections A to F, reported by the
+  developer): no problems in A, C, D, E; the design judgement (F) was favourable. In B, a first
+  draft on a poor connection ended with the page's "The AI service took too long to answer"
+  message (the API's own provider-timeout message, not the proxy's), left the form untouched,
+  and a second attempt after the network recovered worked. The developer recalls the failure
+  at about 30 s; the API's configured provider timeout is 90 s, and the gap is unexplained
+  (the recalled time is approximate).
+- A first browser run found four defects, fixed before this record: a quantity input stretched
+  beside a two-line label; badges scattered to opposite ends of a header; a money field whose
+  real input was 38px with a dead "$" and "USD"; a header 57px instead of 56px.
+
+### Revisit trigger
+Real AI latency above 120 s; Next.js changing or removing proxyTimeout; the client bundle
+becoming a problem; hosting (D-026); a request to add an automated component test.
+
+### Follow-up
+Done: the developer's walkthrough, including one timed real draft. Note the provider-timeout
+gap above if it recurs (time it on a clock). Increment 7b (proposals, attempts and audit)
+needs its own proposal.
+
 ## Template for later entries
 
 ### Decision D-NNN — [Title]
