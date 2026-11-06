@@ -1951,6 +1951,64 @@ A proxy limit shorter than the AI calls that cannot be handled in the UI, or hos
 ### Follow-up
 None beyond Increment 7.
 
+## Decision D-028 — Ostensia's visual identity and the brand guidelines
+
+Date: 2026-11-06
+Status: Accepted (2026-11-06, by the developer)
+Related increment: Increment 7 onward
+Related findings: Brand audit 2026-11-06 (no existing Ostensia brand assets in the
+repository); Report 06 §4.2-§4.3; D-024, D-027; EV-01 (third-party trademarks in the video)
+Related risks: A generic or inconsistent interface; provenance blurred between AI,
+Ostensia, the person and PayPal; claims the product cannot support
+
+### Context
+Increment 7 builds the first UI. The repository held no logo, colours or fonts for
+Ostensia; the only styling was a spike report generator's defaults. The interface
+must make the source of each piece of content clear (AI, deterministic rules, the
+person, PayPal Sandbox, the simulated shop).
+
+### Options considered
+1. A deliberate identity: quiet, precise financial infrastructure, with provenance
+   as the defining principle, specified in a canonical document.
+   - Benefits: coherent, reviewable, and it makes the product's honesty visible.
+   - Costs/risks: design time before implementation.
+2. A framework starter or component library defaults.
+   - Benefits: fastest.
+   - Costs/risks: generic; no provenance language; new dependencies.
+
+### Decision
+Option 1, specified in docs/design/OSTENSIA_BRAND_GUIDELINES.md (version 1.0), the
+canonical source of truth for the frontend's visual identity. Within it: the text
+wordmark "Ostensia" and no symbol; the light theme and teal palette; IBM Plex Sans
+and Mono through next/font, served locally (D2); the provenance system; an explicit
+"Use this draft in the form" step (D3); an API availability indicator worded
+"Ostensia API available / unreachable" and limited to the Fastify API (D4).
+Client-side mandate validation with the domain's runtime MandateTermsSchema (D1) is
+approved subject to verification (the runtime dependency graph, the Next.js
+workspace compile, the production build and the browser bundle) and will be recorded
+with Increment 7a's frontend decision as a deliberate exception to the type-only
+import approach. The server-side gate stays authoritative. Contrast adjustments
+made before adoption: success-700 #1B7F4B to #1A7C49; new token line-500 #8792A6
+for form-control borders.
+
+### Rationale
+The judging weighs a complete product experience and a clear demonstration; the
+product's credibility rests on showing who decided what.
+
+### Trade-offs
+Light theme only; plain CSS without a component library; hand-drawn icons.
+
+### Verification
+Contrast computed for every pairing (WCAG 2.2 AA). The Increment 7a walkthrough
+checks the guidelines on screen.
+
+### Revisit trigger
+A requirement that conflicts with the guidelines, a failed contrast check, or a
+decision to add dark mode.
+
+### Follow-up
+CLAUDE.md section 14 requires reading the guidelines before frontend work.
+
 ## Template for later entries
 
 ### Decision D-NNN — [Title]
