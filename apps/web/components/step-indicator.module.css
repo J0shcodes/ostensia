@@ -1,0 +1,41 @@
+.steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8) var(--space-24);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  font-size: var(--text-14);
+  color: var(--ink-500);
+}
+
+.number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--line-500);
+  border-radius: 50%;
+  background: var(--surface-0);
+  font-size: var(--text-12);
+  font-weight: 600;
+  color: var(--ink-500);
+}
+
+.current {
+  color: var(--ink-900);
+  font-weight: 600;
+}
+
+.current .number {
+  background: var(--brand-600);
+  border-color: var(--brand-600);
+  color: var(--surface-0);
+}

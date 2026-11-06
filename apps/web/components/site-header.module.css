@@ -1,0 +1,45 @@
+.header {
+  background: var(--surface-0);
+  border-bottom: 1px solid var(--line-200);
+}
+
+.inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-16);
+  max-width: var(--content-max);
+  /* 56px in total, counting the 1px bottom border of the header. */
+  min-height: calc(var(--header-height) - 1px);
+  margin: 0 auto;
+  padding: 0 var(--space-24);
+}
+
+/* The wordmark is text: IBM Plex Sans 600, no symbol (guidelines section 2). */
+.wordmark {
+  font-size: var(--text-20);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink-900);
+}
+
+.disclosure {
+  background: var(--surface-100);
+  border-bottom: 1px solid var(--line-200);
+}
+
+.disclosureInner {
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-24);
+  font-size: var(--text-13);
+  color: var(--ink-700);
+}
+
+@media (max-width: 639px) {
+  .inner,
+  .disclosureInner {
+    padding-left: var(--space-16);
+    padding-right: var(--space-16);
+  }
+}

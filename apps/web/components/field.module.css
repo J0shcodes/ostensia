@@ -1,0 +1,53 @@
+.field {
+  display: grid;
+  /* Without this, a field beside a taller one (a two-line label) stretches its control. */
+  align-content: start;
+  gap: var(--space-4);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.labelRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-8);
+  padding: 0;
+}
+
+.label {
+  font-size: var(--text-14);
+  font-weight: 500;
+  color: var(--ink-900);
+}
+
+.required {
+  font-size: var(--text-13);
+  color: var(--ink-500);
+}
+
+/* Marks a value the AI wrote, until the person edits it. Dashed, like the AI panel. */
+.aiMark {
+  padding: 2px var(--space-8);
+  background: var(--ai-50);
+  border: 1px dashed var(--ai-600);
+  border-radius: var(--radius-badge);
+  color: var(--ai-600);
+  font-size: var(--text-12);
+  font-weight: 600;
+}
+
+.help {
+  font-size: var(--text-13);
+  color: var(--ink-500);
+}
+
+.error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  font-size: var(--text-14);
+  color: var(--danger-700);
+}

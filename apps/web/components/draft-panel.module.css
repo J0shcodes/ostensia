@@ -1,0 +1,44 @@
+.stack {
+  display: grid;
+  gap: var(--space-16);
+  min-width: 0;
+}
+
+.note {
+  font-size: var(--text-14);
+  color: var(--ink-700);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-12);
+}
+
+.reason {
+  font-size: var(--text-13);
+  color: var(--ink-500);
+}
+
+.facts {
+  display: grid;
+  gap: var(--space-8);
+  font-size: var(--text-14);
+}
+
+.factLabel {
+  font-size: var(--text-13);
+  color: var(--ink-500);
+}
+
+.list {
+  margin: 0;
+  padding-left: var(--space-24);
+  font-size: var(--text-14);
+}
+
+.group {
+  display: grid;
+  gap: var(--space-4);
+}

@@ -1,0 +1,93 @@
+/* The provenance system (guidelines section 7). Meaning is carried by the border style
+   (dashed, solid, dotted) as well as by colour. */
+
+.panel {
+  display: grid;
+  gap: var(--space-16);
+  min-width: 0;
+  padding: var(--space-24);
+  background: var(--surface-0);
+  border: 1px solid var(--line-300);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-12);
+}
+
+.title {
+  font-size: var(--text-20);
+  font-weight: 600;
+}
+
+/* Badges stay together at the end of the header. */
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-8);
+}
+
+/* A panel inside another one: no second shadow. */
+.nested {
+  padding: var(--space-16);
+  box-shadow: none;
+}
+
+.nested .title {
+  font-size: var(--text-16);
+}
+
+/* AI: a suggestion. Dashed, violet. */
+.ai {
+  background: var(--ai-50);
+  border: 1px dashed var(--ai-600);
+  box-shadow: none;
+}
+
+/* Ostensia's own deterministic code, or an action the person took. Solid, teal. */
+.ostensia,
+.person {
+  background: var(--brand-50);
+  border: 1px solid var(--brand-600);
+  box-shadow: none;
+}
+
+/* The simulated shop. Dotted, grey. */
+.simulated {
+  border: 1px dotted var(--sim-600);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 2px var(--space-8);
+  background: var(--surface-0);
+  border: 1px solid currentColor;
+  border-radius: var(--radius-badge);
+  font-size: var(--text-12);
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.badgeAi {
+  color: var(--ai-600);
+  border-style: dashed;
+}
+
+.badgeOstensia,
+.badgePerson {
+  color: var(--brand-600);
+}
+
+.badgeSimulated {
+  color: var(--sim-600);
+  border-style: dotted;
+}

@@ -1,0 +1,19 @@
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  font-size: var(--text-14);
+  font-weight: 500;
+}
+
+.available {
+  color: var(--success-700);
+}
+
+.unreachable {
+  color: var(--danger-700);
+}
+
+.checking {
+  color: var(--ink-500);
+}
