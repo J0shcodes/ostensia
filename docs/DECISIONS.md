@@ -1668,6 +1668,7 @@ the AI's draft (TD-022).
 The developer runs `pnpm --filter @ostensia/api draft-smoke`. Increment 6b
 (a labelled AI shopping agent) needs its own proposal. Increment 8 must cover the
 hackathon's judging-access, repository and video requirements.
+Judge access: see D-026.
 
 ## Decision D-025 — The AI shopping agent: it proposes a cart, the shop prices it, the gate decides
 
@@ -1797,6 +1798,158 @@ The developer runs `pnpm --filter @ostensia/api agent-smoke` and the output goes
 under docs/evidence/ai-drafting/. Then Increment 7 (the UI), which calls these
 routes, and Increment 8 (demo hardening, with the hackathon's judging-access,
 repository and video requirements).
+
+## Decision D-026 — Judge access: local run with the judge's own sandbox credentials; no shared credentials
+
+Date: 2026-11-05
+Status: Accepted (2026-11-06, by the developer; the clean-clone verification below is still to be done)
+Related increment: Increments 7 and 8
+Related findings: D-024 Context (the rules' access requirement, checked 2026-11-05); D-013
+(local-first); docs/research/mid-build-validation/06-research-to-implementation-decisions.md §6;
+EV-01, EV-39, EV-40, EV-41, EV-42
+Related risks: A judge cannot run the payment path; credentials leaving the server; scope growth
+from hosting or authentication one week before the deadline
+
+### Context
+D-024 records what the rules require: a build that judges can run or interact with, through
+setup and run instructions in the repository or a hosted demo, and instructions that let a
+judge run the project with their own sandbox credentials and AI key. It did not decide how.
+The API does not start without PayPal sandbox credentials and a vault id
+(apps/api/src/index.ts:21-26); the AI routes are optional (D-024). A vault is created by a
+manual Postman flow with a sandbox buyer's approval (Report 00 L3). The rules also allow
+entrants to supply "test account credentials, API keys, or sandbox login details", and an
+organiser update says judges are not required to run projects.
+
+### Options considered
+1. Judges run locally with their own PayPal sandbox app and vault, and optionally their own
+   Anthropic key, following the README; the video carries the judging for judges who do not run it.
+   - Benefits: intended to satisfy the rules' local-run option ("clear, complete setup and run
+     instructions"); no new code, hosting, authentication or shared secrets.
+   - Costs/risks: a judge who runs it must create a sandbox app and approve a vault; compliance
+     depends on the README being complete and on a successful clean-clone run.
+2. Option 1 plus the entrant's sandbox-only credentials in the Devpost testing field.
+   - Benefits: less work for a judge.
+   - Costs/risks: credentials leave the server and must stay valid and private until
+     2026-12-21; conflicts with CLAUDE.md section 8.
+3. A hosted demo behind a passcode.
+   - Benefits: nothing for a judge to install.
+   - Costs/risks: hosting, a public bind, authentication, durable storage and an AI spending cap.
+4. A mode in which the API starts without PayPal.
+   - Benefits: a judge without credentials sees the UI.
+   - Costs/risks: a backend change; risks presenting simulated payments as real.
+
+### Decision
+Option 1.
+- The README tells a judge how to create a PayPal sandbox app, create a sandbox buyer vault
+  with the tracked collection (docs/evidence/paypal-lifecycle/ostensia-e1.postman_collection.json,
+  folders 01a and 01b), fill apps/api/.env, optionally add an Anthropic key, and start both apps.
+- The entrant does not distribute PayPal or Anthropic credentials, in the repository, in
+  Devpost fields or elsewhere.
+- No hosting, no authentication, no mode without PayPal. The API is unchanged.
+- The frontend has no credentials or settings screen. When AI is not configured it says so, and
+  the manual mandate form still works.
+- The Devpost testing instructions point to the README and the video.
+
+This approach is intended to satisfy the rules' local-run option. It is not established as
+compliant until the verification below passes and the README instructions are complete.
+
+Out of scope: participant eligibility (Official Rules section 3). It is a separate matter from
+judge access; neither technical readiness nor judge access is evidence of it. Resolved on
+2026-11-06 by the developer's own assessment: the developer states that they meet all the
+eligibility criteria in Official Rules section 3. No confirmation from the organiser was sought
+or received. The organiser keeps the sole right to determine eligibility (Official Rules
+section 6) and verifies a winner's identity and role before paying a prize (section 8).
+
+### Rationale
+The simplest option intended to satisfy the rules' local-run option. It keeps credentials on
+the server (CLAUDE.md section 8) and adds nothing to build one week before the deadline.
+
+### Trade-offs
+A judge who wants to run the payment path must complete a sandbox vault approval. Judges who do
+not run it rely on the video and the description.
+
+### Verification
+1. Clean-clone run: before submission, the developer follows only the README, from a fresh
+   clone with a new apps/api/.env, and completes one capture, one pre-check block and one
+   revoke-then-void against the sandbox. Any step the README does not cover is a failure and is
+   fixed in the README.
+2. No Anthropic key: with ANTHROPIC_API_KEY unset, the API starts, the AI routes answer 503
+   not_configured, the UI says AI is off, and a mandate entered manually in the form can be
+   confirmed and taken through capture, block and void.
+3. No credentials distributed: the repository, the Devpost fields and the video contain no
+   PayPal or Anthropic credential.
+The results are recorded in docs/BUILD_STATUS.md.
+
+### Revisit trigger
+The clean-clone run fails; the rules or the organisers require hosting or working credentials;
+or the eligibility review reports that judges could not run the build.
+
+### Follow-up
+README and Devpost testing instructions (Increment 8).
+
+## Decision D-027 — The browser reaches the API through a Next.js rewrite (confirms D-006)
+
+Date: 2026-11-05
+Status: Accepted (2026-11-06, by the developer; the acceptance criteria below are checked in Increment 7)
+Related increment: Increment 7
+Related findings: D-006 (docs/DECISIONS.md:320-322); Report 00 L1 and C7; EV-43 (Next.js
+rewrites documentation); 06-research-to-implementation-decisions.md §7
+Related risks: CORS failures; the API exposed beyond 127.0.0.1; configuration reaching browser
+code; a proxy cutting off slow AI calls
+
+### Context
+D-006 chose a rewrite so that no CORS setup is needed. apps/web/.env.example instead declares
+NEXT_PUBLIC_API_BASE_URL, which Next.js embeds in browser code and which implies direct calls.
+Next.js documents rewrites as a URL proxy that can target an external URL; it does not document
+a proxy timeout.
+
+### Options considered
+1. Next.js rewrite of /api/:path* to the API (same origin for the browser).
+   - Benefits: no CORS, no new dependency, no API change; the API stays on 127.0.0.1.
+   - Costs/risks: two local processes (accepted in D-006); proxy timeout unknown.
+2. Direct browser calls to Fastify with CORS support.
+   - Benefits: no proxy.
+   - Costs/risks: a new dependency and an API change; contradicts D-006.
+3. Next.js route handlers as a backend-for-frontend.
+   - Benefits: full control of each call.
+   - Costs/risks: more code; D-006 keeps policy and secrets out of the web app.
+
+### Decision
+Option 1. next.config rewrites /api/:path* to `${API_ORIGIN}/:path*`. API_ORIGIN is a
+server-only variable (example: http://127.0.0.1:4000). apps/web/.env.example replaces
+NEXT_PUBLIC_API_BASE_URL with API_ORIGIN. Fastify is unchanged and stays bound to 127.0.0.1.
+
+### Rationale
+It is what D-006 decided, and it is the smallest working arrangement.
+
+### Trade-offs
+Every API call passes through the Next.js server.
+
+### Verification (acceptance criteria for Increment 7)
+1. Every browser request to the API uses a same-origin relative path under /api; no client code
+   contains an absolute API URL.
+2. Server-only configuration is not exposed to the browser. API_ORIGIN is read only in
+   server-side configuration (next.config), and no NEXT_PUBLIC_ variable refers to the API.
+   After `next build` with API_ORIGIN set to the value under test, the browser-delivered assets
+   (.next/static and the HTML pages) contain neither that origin value nor any other server-only
+   configuration value. In the browser's network panel, every API request goes to the page's own
+   origin.
+3. With both processes running, a request through the rewrite (GET /api/health) returns
+   Fastify's response.
+4. Slow requests are tested for premature termination: the real draft and agent routes, and a
+   deliberately delayed upstream used only in the test, complete through the rewrite. Any limit
+   found is measured, documented, and shown to the user as a clear error.
+5. With Fastify stopped, the UI shows a clear message that the Ostensia API is unreachable. It
+   shows no stack trace, no internal address and no API_ORIGIN value, and it does not retry a
+   payment write (POST /attempts, settle).
+6. No CORS package is added to apps/api; Fastify sends no CORS headers; no browser code connects
+   to Fastify's port directly.
+
+### Revisit trigger
+A proxy limit shorter than the AI calls that cannot be handled in the UI, or hosting.
+
+### Follow-up
+None beyond Increment 7.
 
 ## Template for later entries
 

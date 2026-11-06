@@ -57,6 +57,27 @@ Revisit the relationship between pre-purchase policy enforcement and
 post-purchase dispute evidence after the hackathon. Do not build both
 as full products in the MVP.
 
+Mid-build validation (2026-11-05, docs/research/mid-build-validation/):
+- Working audience hypothesis: developers and platforms building AI shopping
+  agents that pay through PayPal, with the consumer as the demonstrated end user.
+  It rests on product fit, not on willingness-to-pay or developer-demand evidence.
+- In the PayPal flow Ostensia acts as the merchant: it charges a buyer's saved
+  PayPal wallet that was approved once for this merchant. It does not let an agent
+  pay other merchants with that wallet.
+- The mandate hash in custom_id is application-level traceability, not proof of
+  the buyer's identity, consent or authorization.
+- Other initiatives address authorization at the basket level, at different
+  stages of maturity. AP2 is an open protocol at a pre-release version (v0.2),
+  being moved to the FIDO Alliance; its checkout mandates bind a specific cart.
+  Mastercard Verifiable Intent is a specification Mastercard announced and
+  open-sourced in March 2026; its integration into Agent Pay was described as
+  coming (seen only in excerpts). Neither was tested here, and how widely either
+  is deployed was not established.
+- What Ostensia currently implements is a deterministic check of a cart's items
+  against a person-confirmed mandate before the PayPal capture, in its own sandbox
+  merchant flow. Whether that is distinctive in the market is a hypothesis, not a
+  finding.
+
 ## 4. Existing integration evidence
 
 The October 28 spike supports the tested vault, authorization,
@@ -118,6 +139,18 @@ demonstration. Submission requirements include a public repository
 with an open-source license and a public YouTube demo under three minutes.
 Verify all requirements against the current official rules before submission.
 
+Re-checked 2026-11-05: judge access is decided in D-026, accepted 2026-11-06 (a
+local run with the judge's own sandbox credentials; no credentials distributed),
+pending its clean-clone verification. Organiser updates say judges are not required to
+run projects, test credentials must stay active until 2026-12-21, and
+submissions are locked after the deadline.
+
+Participant eligibility (Official Rules section 3) is a separate matter from
+judge access and technical readiness. Resolved 2026-11-06 by the developer's own
+assessment that they meet all the criteria; no organiser confirmation was sought
+or received. The organiser keeps the sole right to determine eligibility
+(section 6) and verifies a winner before paying a prize (section 8).
+
 ## 8. Source precedence
 
 This summary and docs/spike-findings.md are the concise current build
@@ -126,6 +159,8 @@ context. They do not replace actual test results or official API contracts.
 The historical report at
 docs/research/archive/PayPal-AI-Hackathon-Research-2026-10-02.md
 is background, not an implementation specification.
+That file is not in the repository (Report 00, C6). Its contents cannot be
+checked.
 
 If a historical claim, an assumption or this summary conflicts with
 reproducible test evidence or current official documentation, stop and

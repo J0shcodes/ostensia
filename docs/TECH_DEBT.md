@@ -533,6 +533,70 @@ that marks a proposal as AI-originated if a judge needs it in the record.
 Review trigger: The smoke run, or the video script.
 Status: Accepted for MVP
 
+## Item TD-026 — No AI-agent cart has been through the PayPal payment path
+
+Date identified: 2026-11-05
+Related increment: Increment 8
+Why it was deferred: The agent was verified only up to the pre-check (AGENT_SMOKE_RESULTS.md);
+the sandbox end-to-end run uses deterministic scenarios (apps/api/scripts/e2e-run.ts:100).
+Current limitation: An agent cart goes through the same POST /attempts path as a scenario cart,
+but no recorded run has authorized and captured one.
+Impact if left unresolved: The demo cannot present the AI agent completing a PayPal transaction.
+Required evidence or dependency: One recorded sandbox run of an agent cart through authorization
+and capture, written up like E2E_RESULTS.md.
+Estimated future size: S
+Proposed resolution: Record that run in Increment 8, or keep the demo stopping at the pre-check.
+Review trigger: Before recording the video.
+Status: Open
+
+## Item TD-027 — The source of a proposal is not recorded in the audit log
+
+Date identified: 2026-11-05
+Related increment: Increment 7 (UI); post-hackathon
+Why it was deferred: The API labels AI and simulated proposals in its responses; recording the
+source would change the gate's events (related: TD-025, Report 00 L7).
+Current limitation: The audit view cannot show whether an attempt's cart came from the AI agent,
+a scenario or another client.
+Impact if left unresolved: The UI must keep the label it received and must not imply that the
+audit log records the source.
+Required evidence or dependency: None.
+Estimated future size: S
+Proposed resolution: Record the proposal source with the attempt, after the hackathon.
+Review trigger: Any audit or provenance claim beyond the demo.
+Status: Accepted for MVP
+
+## Item TD-028 — Production requirements for charging a saved PayPal wallet are unconfirmed
+
+Date identified: 2026-11-05
+Related increment: Post-hackathon
+Why it was deferred: Sandbox-only MVP (CLAUDE.md section 8).
+Current limitation: PayPal documents stored_credential only for card payment sources (EV-08);
+whether it applies to payment_source.paypal.vault_id is unknown (TD-004). Production vaulting
+needs the Live "Save payment methods" capability (EV-10); vetting is reported only by an
+unattributed excerpt (EV-11); the consent wording the merchant must collect is not specified
+(EV-09).
+Impact if left unresolved: The flow cannot be described as production-ready.
+Required evidence or dependency: PayPal documentation or a PayPal answer.
+Estimated future size: M
+Proposed resolution: Ask PayPal; then decide on stored_credential, consent UX and enablement.
+Review trigger: Any move beyond the sandbox.
+Status: Open
+
+## Item TD-029 — When a void releases the buyer's hold is not documented
+
+Date identified: 2026-11-05
+Related increment: Increment 7 (UI copy)
+Why it was deferred: No PayPal page found describes it (EV-07 shows only the void link).
+Current limitation: Ostensia knows only that PayPal reports the authorization as VOIDED.
+Impact if left unresolved: The UI, README and video must not promise an immediate release of
+held funds.
+Required evidence or dependency: PayPal documentation.
+Estimated future size: S
+Proposed resolution: Word the void as "authorization voided; nothing captured; release timing is
+PayPal's"; update if documentation is found.
+Review trigger: Documentation found, or a production plan.
+Status: Accepted for MVP
+
 ## Template for later entries
 
 ## Item TD-NNN — [Title]
