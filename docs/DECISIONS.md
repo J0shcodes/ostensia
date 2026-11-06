@@ -1522,6 +1522,435 @@ required (TD-007).
 Increment 6 (AI drafting), whose output
 feeds POST /mandates after the user confirms it.
 
+## Decision D-024 — AI mandate drafting: the AI proposes, and code completes and decides
+
+Date: 2026-11-05
+Status: Accepted (2026-11-05, by the developer: Increment 6a as proposed, with
+the recommended option for each of the five questions)
+Related increment: Increment 6a (drafting). Increment 6b (a labelled AI shopping
+agent) is separate and needs its own proposal.
+Related findings: D-009 (the AI proposes, the user confirms), D-012, D-016,
+D-023; the hackathon official rules (pasted by the developer, 2026-11-05)
+Related risks: An AI-invented limit; a prompt injected through the person's text;
+a draft treated as a confirmed mandate; a provider key reaching the browser or a
+log; a draft that cannot work with the catalogue
+Related questions: TD-022, TD-023, TD-002
+
+### Context
+MVP steps 1 and 2 (a person describes a purchase and AI proposes a structured
+mandate) did not exist: a client had to post exact terms. The domain already has
+a lenient MandateDraft (null for anything the AI could not read) and a strict
+ConfirmedMandate (D-009). The developer approved: Claude with claude-opus-5-5;
+the server runs without an AI key; drafts are not recorded in the audit log;
+gaps in a draft stay gaps; and a split of Increment 6 into 6a (drafting) and 6b
+(an AI agent that proposes carts, to be proposed separately).
+
+The hackathon rules (checked 2026-11-05) allow any AI provider ("an AI tool,
+model, or platform of their choice") as long as PayPal integration is central.
+They require a working project that judges can run or interact with, through
+setup and run instructions in the repository or a hosted demo, and do not
+require public hosting. This settles the D-013 follow-up "verify the hackathon
+rules" for hosting: local-first stands. It also adds requirements for Increment 8
+(a public repository with a detectable open-source licence, a video under three
+minutes, and instructions that let a judge run the project with their own
+sandbox credentials and AI key).
+
+### Options considered
+1. Provider and model: Claude (claude-opus-5-5); Claude with a cheaper model; or
+   another provider.
+2. Starting without an AI key: start with drafting off, or refuse to start.
+3. Recording drafts: do not record (the confirmed mandate and its intentSummary
+   are recorded), or add a mandate_drafted audit event.
+4. Gaps in a draft: stay missing for a person to fill in, or server-suggested
+   defaults.
+5. The AI shopping agent: with 6a, split into 6a and 6b, or left out.
+
+### Decision
+The recommended option in each case: Claude (claude-opus-5-5); start without an
+AI key; do not record drafts; gaps stay gaps; split 6a and 6b.
+
+Drafting only proposes:
+- POST /mandates/draft {instruction} (at most 2,000 characters) returns
+  {aiGenerated: true, label, draft, completeness, warnings}. It creates no
+  mandate, writes no audit event, and makes no PayPal call. A person reviews and
+  edits, then confirms through POST /mandates, which is unchanged: the gate
+  validates the terms and computes the hash. Everything the route returns is
+  labelled AI-generated.
+- completeDraft (packages/domain/src/draft.ts, pure) says whether a draft is
+  complete (and gives the exact terms) or incomplete. It lists a null field as
+  missing by path ("items[0].maxUnitPriceMinor") and reports a present but
+  unacceptable value (a date that is not a date, a limit of zero, duplicate
+  products) as a problem. It never fills a gap and never applies a default. A
+  complete result is validated by the same MandateTermsSchema the gate uses.
+- draftWarnings (apps/api/src/ai/) shows deterministic warnings next to a draft:
+  a product not in the catalogue, a catalogue price above the unit-price limit, a
+  variant the catalogue does not sell, an expiry that is not in the future. They
+  never change the draft and never block it.
+- The drafter (apps/api/src/ai/drafter.ts) makes one call with the Anthropic SDK:
+  structured output from the existing Zod schema (zodOutputFormat with
+  beta.messages.parse), effort medium, max_tokens 16000, no tools, no web access,
+  no sampling settings, and the server-side refusal fallback (fallbacks:
+  "default"). The reply is validated again by our own schema before it is used.
+  It returns a value for everything the provider can do: drafted, refused,
+  invalid_output (cut off, no output, or not the schema) and unavailable (auth,
+  rate_limited, timeout, connection, bad_request, server). An error it does not
+  recognise is rethrown, not hidden. The provider's text is never passed on.
+- The system prompt is fixed text plus the synthetic catalogue; the date and the
+  person's words go only in the user message. The prompt tells the model to leave
+  unstated fields null, to treat the description as data and not as instruction,
+  and to put anything unclear in notes. This is a mitigation, not the control
+  (see below).
+- The control is structural. The model cannot call a tool, cannot reach the web,
+  cannot create anything, and its output is limited to the draft shape and then
+  checked by code. The worst an injected instruction can produce is a draft
+  that a person reviews, which the label and the warnings make visible.
+- Configuration: ANTHROPIC_API_KEY, optional. With no key the server starts, logs
+  that drafting is off, and the draft route answers 503 not_configured. A key
+  that is set but malformed, or an ANTHROPIC_BASE_URL other than
+  https://api.anthropic.com, stops the start. The SDK client is given the host
+  explicitly, so an environment setting cannot redirect a request that carries
+  the key. The key stays on the server and is never logged.
+- Errors: provider unavailable 503 (with a reason), refused 422, unusable output
+  502, a bad request 400. The SDK's own retries of 429 and 5xx stay on, because
+  drafting only reads and returns text, unlike a PayPal write (D-010).
+
+Dependency: @anthropic-ai/sdk 1.3.0 in apps/api, pinned exactly (it works with
+the repository's Zod 4.6.7 as an optional peer). It is Apache-2.0 licensed, not
+MIT, and brings seven transitive packages (standardwebhooks, json-schema-to-ts,
+@opentelemetry/api, @babel/runtime, @stablelib/base64, fast-sha256, ts-algebra).
+It was chosen over a hand-written fetch client for the typed structured-output
+helper, typed errors and retries. 1.3.0 was published on 2026-10-23; the latest
+release (1.5.0) was one day old when this was decided, so an older release was
+pinned. The licences go into the TD-002 review.
+
+### Rationale
+The AI does the one job it is suited to, reading words, and everything that
+matters stays in deterministic code: what is complete, what is valid, what is
+enforced. A person is always between a draft and a mandate.
+
+### Trade-offs
+- Drafts are not recorded (TD-022 notes the cost): the audit shows the confirmed
+  mandate and its summary, not the AI's original draft or the person's edits.
+- The model's behaviour is not deterministic, and its quality had not been
+  observed against the real provider when this was decided (TD-022).
+- The draft route spends money and has no rate limit (TD-023, TD-007).
+- The summary of the person's intent is the AI's wording until the person edits
+  it.
+
+### Verification
+Domain tests for completeDraft (every field, every subset of nulls, problems
+against gaps, invalid input, determinism). Drafter tests against a fake client for
+the request shape (no tools, no sampling, the fixed system prompt, the
+instruction only in the user message) and every outcome, including a reply the SDK
+rejected and an error it does not recognise. Route tests for every status code,
+the limits, the label and that nothing is created. Configuration and boundary
+tests. A real node process started with placeholder values: drafting off without
+a key; with a placeholder key a real 401 from the provider came back as 503 auth;
+a malformed key and a foreign base URL stopped the start; the key appeared in no
+log; no audit file was written. The developer's first draft-smoke run
+(2026-11-05, docs/evidence/ai-drafting/DRAFT_SMOKE_RESULTS.md) used the real
+model on four fictional descriptions: unstated fields stayed null, an instruction
+hidden in a description was not obeyed, and amounts and dates were converted
+correctly, at about 1.6 cents a draft. It also found that the model sent an empty
+allowedVariantIds list to mean "no restriction", which is not a valid term (the
+structured-output schema cannot express a minimum length). The prompt now says to
+leave the field out, and the code deliberately does not turn an empty list into
+"no restriction", because that could loosen a limit. A second run after the fix
+(2026-11-05) showed no problems and the variant list left out where there was no
+restriction.
+
+### Revisit trigger
+The smoke run shows invented values or poor quality; the provider's refusal rate
+is a problem; hosting is required (TD-007, TD-023); or the audit needs to show
+the AI's draft (TD-022).
+
+### Follow-up
+The developer runs `pnpm --filter @ostensia/api draft-smoke`. Increment 6b
+(a labelled AI shopping agent) needs its own proposal. Increment 8 must cover the
+hackathon's judging-access, repository and video requirements.
+Judge access: see D-026.
+
+## Decision D-025 — The AI shopping agent: it proposes a cart, the shop prices it, the gate decides
+
+Date: 2026-11-05
+Status: Accepted (2026-11-05, by the developer: Increment 6b as proposed, with
+the recommended option for each of the four questions)
+Related increment: Increment 6b
+Related findings: D-007, D-012, D-022, D-023, D-024; the hackathon judging
+criteria ("Technological Implementation" and the "Best Use of PayPal + AI" and
+"Best Use of Agentic Commerce" honorable mentions)
+Related risks: An AI that states its own prices; an agent treated as an authority;
+a simulation that looks like a real merchant; a prompt injected through the task
+Related questions: TD-024, TD-025
+
+### Context
+The product is a gate for AI purchasing, but until now no AI purchased anything in
+the demo: the simulated agent (D-012) is deterministic code that builds six fixed
+scenarios. 6b adds an AI agent that turns a task into a cart, so the demo can show
+a real AI proposing and the same deterministic gate allowing or blocking it. The
+developer chose: a labelled `mode` on each request (informed or uninformed);
+propose only, with the client submitting the cart; no audit event for the agent's
+reasoning; and a smoke run that evaluates carts with the pre-check only.
+
+### Options considered
+1. What the agent sees: the task and the mandate's limits; the task only; or a
+   labelled mode that chooses between them.
+2. Autonomy: propose only, or a route that also runs the gate.
+3. The agent's reasoning: not recorded in the audit log, or a new event.
+4. Verification: a pre-check-only smoke run, or also a full sandbox run.
+
+### Decision
+The recommended option in each case: a labelled `mode`; propose only; do not
+record the reasoning; a pre-check-only smoke run.
+
+- POST /mandates/:id/agent-proposal {mode, task?} returns {aiGenerated: true,
+  simulatedShop: true, label, mode, modeNote, proposal | null, declined | null,
+  rationale}. With no task, the agent shops for the mandate's intentSummary (at
+  most 2,000 characters otherwise). The route creates no attempt, writes no audit
+  event and makes no PayPal call. The client sends the proposal to POST /attempts
+  like any other proposal, where the gate decides.
+- `informed` mode shows the agent the mandate's limits (it shows that even a
+  well-behaved agent is checked); `uninformed` withholds them (it shows the gate
+  stopping an agent that does not know the buyer's policy). The response says
+  which, in words. The uninformed request contains no limit at all (tested).
+- The agent (apps/api/src/ai/shopper.ts) makes one call, like the drafter
+  (D-024): claude-opus-5-5, effort medium, structured output, no tools, no web
+  access, no sampling settings, the refusal fallback, and its reply checked again
+  by our own schema. It chooses productId, variantId and quantity from the
+  synthetic catalogue, and explains the choice. It never states a price.
+- The cart becomes a PurchaseProposal in plain code (cart.ts): every unit price
+  and the total come from the catalogue, so an agent cannot misstate an amount. A
+  cart that does not fit the shop (an unknown product, a variant of another
+  product, an empty cart, a bad quantity) is invalid and is never corrected: the
+  route answers 502.
+- An agent that buys nothing returns a decline with its reason and no proposal
+  (200). A cart that comes with a reason for buying nothing contradicts itself and
+  is not used. The other outcomes are as for drafting: refused 422, unusable
+  output 502, provider unavailable 503 with a reason, and 503 not_configured when
+  there is no key. The provider's error handling is shared with the drafter
+  (provider-errors.ts).
+- Startup creates one SDK client and gives it to both the drafter and the agent.
+  With no ANTHROPIC_API_KEY both routes answer 503 and the deterministic scenarios
+  (D-023) still work.
+- The structural controls are those of D-024: no tools, no web access, output
+  limited to a cart shape that code then checks, and a gate that evaluates every
+  proposal deterministically. The agent has no authority: a cart is only a
+  proposal.
+- `pnpm --filter @ostensia/api agent-smoke` (run by the developer) gives the agent
+  six fictional tasks against one in-memory mandate and prints each cart, the
+  agent's explanation and the pre-check's decision. It makes no PayPal call and
+  creates no attempt. About ten cents at list price.
+
+A finding while building it (TD-024): SDK 1.3.0 sends an enum or const in a
+structured-output schema to the API as description text, not as a constraint. The
+API therefore does not enforce the product and variant lists (nor the drafter's
+currency): our own validation does, and a reply that names something the shop does
+not have is returned as invalid_output. This is a reliability cost, not a safety
+one, and it corrects the impression in D-024 that the API limits the output to the
+draft shape: the API enforces types and required fields, and our code enforces the
+rest.
+
+### Rationale
+It shows the product's thesis directly (a real AI proposes, the gate decides) at
+small cost, because the gate, the pricing and the evaluation already exist. The AI
+stays advisory: it cannot set a price, create an attempt or call PayPal.
+
+### Trade-offs
+- The agent is not deterministic. An uninformed agent may stay within the limits on
+  a given run, so a guaranteed block in the video should use a deterministic
+  scenario (D-023) (TD-025).
+- The agent's explanation is its own wording and is not verified; it is shown
+  labelled. It is not recorded in the audit log, so the audit shows the proposal
+  and the gate's decision, not why the agent chose the cart (TD-025).
+- The agent draws on the same key as drafting, and the same cost and rate-limit
+  concerns apply (TD-023).
+- Prices are the catalogue's, so the agent cannot be tested for price mistakes: it
+  cannot make one.
+
+### Verification
+Tests (47 files, 1419 tests): the cart builder (prices only from the catalogue,
+an agent's own price ignored, every invalid cart, no correction); the agent against
+a fake client (the request shape with no tools and no sampling, the fixed prompt per
+mode, the limits shown to an informed agent and absent from an uninformed request,
+every outcome, a reply the SDK rejected, an error it does not recognise); the
+prompts; the route (every status code, the labels, the limits on the task, that
+nothing is created, and a cart the real gate captures and one it blocks before
+PayPal, on the stub adapter); and boundary scans (the agent and the drafter are the
+only callers of the provider, neither reaches the gate or PayPal, the model gets no
+tools). 32 of 32 deliberate mutations of the new code were caught. A real node
+process with placeholder values: no key gave 503 not_configured; a placeholder key
+drew a real 401 from the provider, answered 503 auth; the key appeared in no log
+and nothing was written to the audit log. The developer's agent-smoke run (2026-11-05,
+docs/evidence/ai-drafting/AGENT_SMOKE_RESULTS.md) used the real model on six
+fictional tasks, with the pre-check only: the informed agent stayed within the
+limits (or declined, naming the limits) in all four informed runs; the uninformed
+agent exceeded them in both uninformed runs and the pre-check blocked both; the
+instruction hidden in a task was not obeyed; about 1 cent a call. It is one sample
+of a non-deterministic model (TD-025).
+
+### Revisit trigger
+The smoke run shows an agent that obeys text hidden in a task, misreads a limit
+badly, or names things outside the catalogue often (TD-024); or the demo needs the
+agent's reasoning in the audit (TD-025).
+
+### Follow-up
+The developer runs `pnpm --filter @ostensia/api agent-smoke` and the output goes
+under docs/evidence/ai-drafting/. Then Increment 7 (the UI), which calls these
+routes, and Increment 8 (demo hardening, with the hackathon's judging-access,
+repository and video requirements).
+
+## Decision D-026 — Judge access: local run with the judge's own sandbox credentials; no shared credentials
+
+Date: 2026-11-05
+Status: Accepted (2026-11-06, by the developer; the clean-clone verification below is still to be done)
+Related increment: Increments 7 and 8
+Related findings: D-024 Context (the rules' access requirement, checked 2026-11-05); D-013
+(local-first); docs/research/mid-build-validation/06-research-to-implementation-decisions.md §6;
+EV-01, EV-39, EV-40, EV-41, EV-42
+Related risks: A judge cannot run the payment path; credentials leaving the server; scope growth
+from hosting or authentication one week before the deadline
+
+### Context
+D-024 records what the rules require: a build that judges can run or interact with, through
+setup and run instructions in the repository or a hosted demo, and instructions that let a
+judge run the project with their own sandbox credentials and AI key. It did not decide how.
+The API does not start without PayPal sandbox credentials and a vault id
+(apps/api/src/index.ts:21-26); the AI routes are optional (D-024). A vault is created by a
+manual Postman flow with a sandbox buyer's approval (Report 00 L3). The rules also allow
+entrants to supply "test account credentials, API keys, or sandbox login details", and an
+organiser update says judges are not required to run projects.
+
+### Options considered
+1. Judges run locally with their own PayPal sandbox app and vault, and optionally their own
+   Anthropic key, following the README; the video carries the judging for judges who do not run it.
+   - Benefits: intended to satisfy the rules' local-run option ("clear, complete setup and run
+     instructions"); no new code, hosting, authentication or shared secrets.
+   - Costs/risks: a judge who runs it must create a sandbox app and approve a vault; compliance
+     depends on the README being complete and on a successful clean-clone run.
+2. Option 1 plus the entrant's sandbox-only credentials in the Devpost testing field.
+   - Benefits: less work for a judge.
+   - Costs/risks: credentials leave the server and must stay valid and private until
+     2026-12-21; conflicts with CLAUDE.md section 8.
+3. A hosted demo behind a passcode.
+   - Benefits: nothing for a judge to install.
+   - Costs/risks: hosting, a public bind, authentication, durable storage and an AI spending cap.
+4. A mode in which the API starts without PayPal.
+   - Benefits: a judge without credentials sees the UI.
+   - Costs/risks: a backend change; risks presenting simulated payments as real.
+
+### Decision
+Option 1.
+- The README tells a judge how to create a PayPal sandbox app, create a sandbox buyer vault
+  with the tracked collection (docs/evidence/paypal-lifecycle/ostensia-e1.postman_collection.json,
+  folders 01a and 01b), fill apps/api/.env, optionally add an Anthropic key, and start both apps.
+- The entrant does not distribute PayPal or Anthropic credentials, in the repository, in
+  Devpost fields or elsewhere.
+- No hosting, no authentication, no mode without PayPal. The API is unchanged.
+- The frontend has no credentials or settings screen. When AI is not configured it says so, and
+  the manual mandate form still works.
+- The Devpost testing instructions point to the README and the video.
+
+This approach is intended to satisfy the rules' local-run option. It is not established as
+compliant until the verification below passes and the README instructions are complete.
+
+Out of scope: participant eligibility (Official Rules section 3). It is a separate matter from
+judge access; neither technical readiness nor judge access is evidence of it. Resolved on
+2026-11-06 by the developer's own assessment: the developer states that they meet all the
+eligibility criteria in Official Rules section 3. No confirmation from the organiser was sought
+or received. The organiser keeps the sole right to determine eligibility (Official Rules
+section 6) and verifies a winner's identity and role before paying a prize (section 8).
+
+### Rationale
+The simplest option intended to satisfy the rules' local-run option. It keeps credentials on
+the server (CLAUDE.md section 8) and adds nothing to build one week before the deadline.
+
+### Trade-offs
+A judge who wants to run the payment path must complete a sandbox vault approval. Judges who do
+not run it rely on the video and the description.
+
+### Verification
+1. Clean-clone run: before submission, the developer follows only the README, from a fresh
+   clone with a new apps/api/.env, and completes one capture, one pre-check block and one
+   revoke-then-void against the sandbox. Any step the README does not cover is a failure and is
+   fixed in the README.
+2. No Anthropic key: with ANTHROPIC_API_KEY unset, the API starts, the AI routes answer 503
+   not_configured, the UI says AI is off, and a mandate entered manually in the form can be
+   confirmed and taken through capture, block and void.
+3. No credentials distributed: the repository, the Devpost fields and the video contain no
+   PayPal or Anthropic credential.
+The results are recorded in docs/BUILD_STATUS.md.
+
+### Revisit trigger
+The clean-clone run fails; the rules or the organisers require hosting or working credentials;
+or the eligibility review reports that judges could not run the build.
+
+### Follow-up
+README and Devpost testing instructions (Increment 8).
+
+## Decision D-027 — The browser reaches the API through a Next.js rewrite (confirms D-006)
+
+Date: 2026-11-05
+Status: Accepted (2026-11-06, by the developer; the acceptance criteria below are checked in Increment 7)
+Related increment: Increment 7
+Related findings: D-006 (docs/DECISIONS.md:320-322); Report 00 L1 and C7; EV-43 (Next.js
+rewrites documentation); 06-research-to-implementation-decisions.md §7
+Related risks: CORS failures; the API exposed beyond 127.0.0.1; configuration reaching browser
+code; a proxy cutting off slow AI calls
+
+### Context
+D-006 chose a rewrite so that no CORS setup is needed. apps/web/.env.example instead declares
+NEXT_PUBLIC_API_BASE_URL, which Next.js embeds in browser code and which implies direct calls.
+Next.js documents rewrites as a URL proxy that can target an external URL; it does not document
+a proxy timeout.
+
+### Options considered
+1. Next.js rewrite of /api/:path* to the API (same origin for the browser).
+   - Benefits: no CORS, no new dependency, no API change; the API stays on 127.0.0.1.
+   - Costs/risks: two local processes (accepted in D-006); proxy timeout unknown.
+2. Direct browser calls to Fastify with CORS support.
+   - Benefits: no proxy.
+   - Costs/risks: a new dependency and an API change; contradicts D-006.
+3. Next.js route handlers as a backend-for-frontend.
+   - Benefits: full control of each call.
+   - Costs/risks: more code; D-006 keeps policy and secrets out of the web app.
+
+### Decision
+Option 1. next.config rewrites /api/:path* to `${API_ORIGIN}/:path*`. API_ORIGIN is a
+server-only variable (example: http://127.0.0.1:4000). apps/web/.env.example replaces
+NEXT_PUBLIC_API_BASE_URL with API_ORIGIN. Fastify is unchanged and stays bound to 127.0.0.1.
+
+### Rationale
+It is what D-006 decided, and it is the smallest working arrangement.
+
+### Trade-offs
+Every API call passes through the Next.js server.
+
+### Verification (acceptance criteria for Increment 7)
+1. Every browser request to the API uses a same-origin relative path under /api; no client code
+   contains an absolute API URL.
+2. Server-only configuration is not exposed to the browser. API_ORIGIN is read only in
+   server-side configuration (next.config), and no NEXT_PUBLIC_ variable refers to the API.
+   After `next build` with API_ORIGIN set to the value under test, the browser-delivered assets
+   (.next/static and the HTML pages) contain neither that origin value nor any other server-only
+   configuration value. In the browser's network panel, every API request goes to the page's own
+   origin.
+3. With both processes running, a request through the rewrite (GET /api/health) returns
+   Fastify's response.
+4. Slow requests are tested for premature termination: the real draft and agent routes, and a
+   deliberately delayed upstream used only in the test, complete through the rewrite. Any limit
+   found is measured, documented, and shown to the user as a clear error.
+5. With Fastify stopped, the UI shows a clear message that the Ostensia API is unreachable. It
+   shows no stack trace, no internal address and no API_ORIGIN value, and it does not retry a
+   payment write (POST /attempts, settle).
+6. No CORS package is added to apps/api; Fastify sends no CORS headers; no browser code connects
+   to Fastify's port directly.
+
+### Revisit trigger
+A proxy limit shorter than the AI calls that cannot be handled in the UI, or hosting.
+
+### Follow-up
+None beyond Increment 7.
+
 ## Template for later entries
 
 ### Decision D-NNN — [Title]

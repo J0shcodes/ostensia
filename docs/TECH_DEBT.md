@@ -36,7 +36,8 @@ docs/evidence/paypal-lifecycle/ostensia-e1.postman_collection.json, which had
 only a pattern scan on 2026-11-02 (no matches).
 Estimated future size: M
 Proposed resolution: Complete the manual review and a dependency license
-check.
+check. Since Increment 6a this includes @anthropic-ai/sdk (Apache-2.0, not MIT)
+and its seven transitive packages (D-024).
 Review trigger: Before the repository is made public.
 Status: Open
 
@@ -426,6 +427,174 @@ Estimated future size: S
 Proposed resolution: Index the events by attempt and mandate, or read them from
 the file on demand under the same lock as the append.
 Review trigger: Hosting becomes required, or the log passes a few thousand events.
+Status: Accepted for MVP
+
+## Item TD-022 — Draft quality and the original draft are not verified or recorded
+
+Date identified: 2026-11-05
+Related increment: Increment 6a
+Why it was deferred: Running the model costs money and needs the developer's key
+(a manual run, D-011), and recording drafts is a gate change (D-024, option 3).
+Current limitation: The drafter is tested against a fake client, not the real
+model. Whether the model leaves unstated fields null, resists an instruction
+hidden in the text, and converts dates and amounts correctly has not been
+observed until the developer's draft-smoke run, and a model is not deterministic,
+so one good run proves little. The AI's original draft and the person's edits are
+not written to the audit log; only the confirmed mandate and its intentSummary
+are.
+Impact if left unresolved: A draft can contain a wrong value that a hurried person
+confirms, and the audit cannot show what the AI proposed.
+Required evidence or dependency: The draft-smoke run, and a decision to add a
+mandate_drafted event if the audit must show the draft.
+Update (2026-11-05): the developer's first draft-smoke run is recorded in
+docs/evidence/ai-drafting/DRAFT_SMOKE_RESULTS.md. The model left unstated fields
+null, did not obey text hidden in a description, and converted amounts and dates
+correctly. It also sent an empty allowedVariantIds list (not a valid term) in two
+samples, which the first run's checks did not catch; the prompt and the script
+were fixed and the second run (2026-11-05) showed no such problem. This is still
+a sample of a non-deterministic model: two runs of four descriptions.
+Estimated future size: S
+Proposed resolution: Run the smoke script and read the drafts, and keep the
+person-in-the-loop review prominent in the UI (Increment 7). Add the audit event
+if a judge or user needs the draft in the record.
+Review trigger: The smoke run shows a wrong or invented value.
+Status: Open
+
+## Item TD-023 — The draft route spends money and has no rate limit
+
+Date identified: 2026-11-05
+Related increment: Increment 6a
+Why it was deferred: The MVP is a local demo (D-013), and the server listens on
+127.0.0.1 only.
+Current limitation: Each call to POST /mandates/draft (and, since Increment 6b,
+POST /mandates/:id/agent-proposal) sends a request to the AI
+provider with the developer's key (a few cents at list price). The only bounds
+are the 2,000-character limit and the 64 KB body limit. There is no rate limit
+and no daily cap.
+Impact if left unresolved: If the API is ever reachable by others (a hosted demo,
+TD-007), anyone who can reach it can spend the key.
+Required evidence or dependency: A decision to host the demo.
+Estimated future size: S
+Proposed resolution: A per-process request cap or a demo passcode, together with
+TD-007, and a spend limit on the provider key.
+Review trigger: Hosting becomes required.
+Status: Accepted for MVP
+
+## Item TD-024 — The SDK sends enum and const constraints as description text
+
+Date identified: 2026-11-05
+Related increment: Increment 6b (also affects 6a)
+Why it was deferred: It was found while testing the agent's schema. Working around
+it means building the output format by hand instead of using the SDK's Zod helper.
+Current limitation: With @anthropic-ai/sdk 1.3.0, the Zod helper (zodOutputFormat)
+keeps only a few JSON Schema keywords (type, properties, required, items, anyOf,
+and some formats) and puts everything else into the description text, including
+`enum` and `const`. The product and variant lists of the shopping agent, and the
+drafter's `currency: "USD"`, reach the model as a hint, not as a constraint the API
+enforces. (Minimum and maximum lengths and values were already known to be
+removed, D-024.)
+Impact if left unresolved: The model can name a product, variant or currency that
+the shop does not have. Our own validation rejects it (invalid_output, a 502), so
+nothing wrong is used, but the request fails instead of being constrained to a
+valid answer. The two smoke runs of the drafter and the first agent runs showed no
+such reply.
+Required evidence or dependency: A newer SDK that keeps enum, or building the
+output format by hand (z.toJSONSchema, without the SDK's transform).
+Estimated future size: S
+Proposed resolution: Check whether a newer SDK release keeps enum and const; if
+not, send the schema without the SDK's transform and parse the reply with our own
+schema (the code already does the second step).
+Review trigger: A smoke run or a demo shows an invalid_output for an out-of-catalogue
+id.
+Status: Accepted for MVP
+
+## Item TD-025 — The AI agent's outcomes are not guaranteed, and its reasoning is not recorded
+
+Date identified: 2026-11-05
+Related increment: Increment 6b
+Why it was deferred: A model is not deterministic, and recording the reasoning is a
+gate change (D-025, option 3).
+Current limitation: Whether an uninformed agent exceeds the limits, or an informed
+agent stays within them, varies by run. Its explanation is its own wording and is
+unverified. Neither the explanation nor the cart's origin is written to the audit
+log; the audit shows the attempt, its proposal and the gate's decision.
+Update (2026-11-05): the developer's first agent-smoke run
+(docs/evidence/ai-drafting/AGENT_SMOKE_RESULTS.md) showed an informed agent within
+the limits in all four runs and an uninformed agent over the limits in both runs,
+blocked by the pre-check. That is one sample; the point stands.
+Impact if left unresolved: A demo that depends on the AI agent being blocked can
+fail to show a block, and the audit cannot show which proposals came from the AI.
+Required evidence or dependency: The developer's agent-smoke run, and a decision to
+add an audit event if the audit must show an AI-originated proposal.
+Estimated future size: S
+Proposed resolution: For a guaranteed block in the video, use a deterministic
+scenario (D-023). Label every AI proposal in the UI (Increment 7). Add an event
+that marks a proposal as AI-originated if a judge needs it in the record.
+Review trigger: The smoke run, or the video script.
+Status: Accepted for MVP
+
+## Item TD-026 — No AI-agent cart has been through the PayPal payment path
+
+Date identified: 2026-11-05
+Related increment: Increment 8
+Why it was deferred: The agent was verified only up to the pre-check (AGENT_SMOKE_RESULTS.md);
+the sandbox end-to-end run uses deterministic scenarios (apps/api/scripts/e2e-run.ts:100).
+Current limitation: An agent cart goes through the same POST /attempts path as a scenario cart,
+but no recorded run has authorized and captured one.
+Impact if left unresolved: The demo cannot present the AI agent completing a PayPal transaction.
+Required evidence or dependency: One recorded sandbox run of an agent cart through authorization
+and capture, written up like E2E_RESULTS.md.
+Estimated future size: S
+Proposed resolution: Record that run in Increment 8, or keep the demo stopping at the pre-check.
+Review trigger: Before recording the video.
+Status: Open
+
+## Item TD-027 — The source of a proposal is not recorded in the audit log
+
+Date identified: 2026-11-05
+Related increment: Increment 7 (UI); post-hackathon
+Why it was deferred: The API labels AI and simulated proposals in its responses; recording the
+source would change the gate's events (related: TD-025, Report 00 L7).
+Current limitation: The audit view cannot show whether an attempt's cart came from the AI agent,
+a scenario or another client.
+Impact if left unresolved: The UI must keep the label it received and must not imply that the
+audit log records the source.
+Required evidence or dependency: None.
+Estimated future size: S
+Proposed resolution: Record the proposal source with the attempt, after the hackathon.
+Review trigger: Any audit or provenance claim beyond the demo.
+Status: Accepted for MVP
+
+## Item TD-028 — Production requirements for charging a saved PayPal wallet are unconfirmed
+
+Date identified: 2026-11-05
+Related increment: Post-hackathon
+Why it was deferred: Sandbox-only MVP (CLAUDE.md section 8).
+Current limitation: PayPal documents stored_credential only for card payment sources (EV-08);
+whether it applies to payment_source.paypal.vault_id is unknown (TD-004). Production vaulting
+needs the Live "Save payment methods" capability (EV-10); vetting is reported only by an
+unattributed excerpt (EV-11); the consent wording the merchant must collect is not specified
+(EV-09).
+Impact if left unresolved: The flow cannot be described as production-ready.
+Required evidence or dependency: PayPal documentation or a PayPal answer.
+Estimated future size: M
+Proposed resolution: Ask PayPal; then decide on stored_credential, consent UX and enablement.
+Review trigger: Any move beyond the sandbox.
+Status: Open
+
+## Item TD-029 — When a void releases the buyer's hold is not documented
+
+Date identified: 2026-11-05
+Related increment: Increment 7 (UI copy)
+Why it was deferred: No PayPal page found describes it (EV-07 shows only the void link).
+Current limitation: Ostensia knows only that PayPal reports the authorization as VOIDED.
+Impact if left unresolved: The UI, README and video must not promise an immediate release of
+held funds.
+Required evidence or dependency: PayPal documentation.
+Estimated future size: S
+Proposed resolution: Word the void as "authorization voided; nothing captured; release timing is
+PayPal's"; update if documentation is found.
+Review trigger: Documentation found, or a production plan.
 Status: Accepted for MVP
 
 ## Template for later entries

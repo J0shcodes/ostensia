@@ -27,7 +27,9 @@ describe("route and simulation source boundaries", () => {
 
   it("finds the files it is meant to scan", () => {
     expect(Object.keys(sources).sort()).toEqual([
+      "routes/agent.ts",
       "routes/attempts.ts",
+      "routes/draft.ts",
       "routes/mandates.ts",
       "routes/respond.ts",
       "routes/simulation.ts",

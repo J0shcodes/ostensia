@@ -2,16 +2,17 @@
 
 Compact status note. Read this first at the start of every session.
 
-Last updated: 2026-11-04
+Last updated: 2026-11-05
 
 ## Status
 
-- **Current increment:** Increment 5b — routes, the synthetic catalogue,
-  the simulated agent and the end-to-end sandbox script. Implemented and
-  verified against a stub adapter and a real node process on branch
-  feat/gate-store-and-api (5a is committed there: 6fcfced, 5a40d0f, not yet
-  pushed or merged); the developer's `e2e` sandbox run passed every step (2026-11-05); awaiting
-  the comprehension answers and commit authorization.
+- **Current increment:** Increment 6b - the AI shopping agent (D-025). The agent
+  turns a task into a cart; code prices it from the catalogue; the client sends the
+  proposal to POST /attempts, where the gate decides. Implemented and verified
+  against a fake client and a real node process on branch feat/ai-drafting (6a is
+  committed there: b717727, 74cfb9d, not yet pushed or merged); the developer's
+  `agent-smoke` run against the real model passed (2026-11-05); awaiting the
+  developer's confirmation and commit authorization.
 - **Passed:**
   - Repository audit (2026-10-29).
   - Directory rename, MIT license and decisions D-001 to D-005,
@@ -51,6 +52,29 @@ Last updated: 2026-11-04
     mandate, blocked an over-total purchase, rebuilt the attempt from the log
     after a restart, and refused to start with a missing credential or a damaged
     log. Nothing was sent to PayPal.
+  - Increment 5b (routes, simulated agent, e2e script), committed in 797652d
+    and 6693e8a and merged to main through PR #5 (959f1b4). The developer's
+    sandbox run passed every step (2026-11-05).
+  - Increment 6a checks (2026-11-05), against a fake client (D-011): pnpm test
+    passes (43 files, 1332 tests), pnpm typecheck passes, and 29 of 30
+    deliberate mutations of the new code were caught (the survivor is a
+    fail-closed guard in completeDraft that is unreachable while the terms
+    schema requires every field). A real node process with placeholder values:
+    drafting off without a key (503 not_configured); with a placeholder key the
+    provider's real 401 came back as 503 auth; a malformed key and a foreign
+    ANTHROPIC_BASE_URL stopped the start; the key appeared in no log; drafting
+    wrote nothing to the audit log. That placeholder-key request sent one
+    fictional sentence to the provider and nothing else. The real model has not
+    been run.
+  - Increment 6a (AI mandate drafting), committed in b717727 and 74cfb9d. The
+    developer's two draft-smoke runs against the real model passed.
+  - Increment 6b checks (2026-11-05), against a fake client (D-011): pnpm test
+    passes (47 files, 1419 tests), pnpm typecheck passes, and 32 of 32 deliberate
+    mutations of the new code were caught. A real node process with placeholder
+    values: no key gave 503 not_configured; a placeholder key drew a real 401 from
+    the provider (503 auth); the key appeared in no log; nothing was written to the
+    audit log. That placeholder-key request sent one fictional sentence to the
+    provider and nothing else. The real model has not been run as a shopper.
 - **Broken:** The spike runner (docs/evidence/spike/scripts/run-spike.js)
   points to countersign-spike.* files and a SPIKE_README.md that do not
   exist (TD-001). The application does not use it.
@@ -79,9 +103,31 @@ Last updated: 2026-11-04
   of a mandate, voided the authorization of a revoked mandate, and rebuilt the
   same state after a restart. Every step passed. The sanitized report is in
   docs/evidence/paypal-lifecycle/E2E_RESULTS.md. Success paths only (TD-015).
-- **Next approved task:** None. Increment 6 (AI mandate drafting) needs its own
-  proposal and approval after 5b.
-- **Next comprehension gate:** Increment 5b walkthrough.
+- **Draft smoke runs, Increment 6a (done 2026-11-05 by the developer):** four
+  fictional descriptions against the real model, twice. Every check passed,
+  nothing was invented, the hidden instruction was not obeyed, and the cost was
+  about 1.7 cents a draft. Reading the first run's drafts found that the model
+  sent an empty allowedVariantIds list in two samples (an invalid term); the
+  prompt and the script's checks were fixed, and the second run showed no such
+  problem. Two runs of a non-deterministic model are a sample, not a guarantee
+  (TD-022). Evidence: docs/evidence/ai-drafting/DRAFT_SMOKE_RESULTS.md.
+- **Open decisions for Increment 8 (hackathon rules, checked 2026-11-05):** the
+  rules require a working build that judges can run or interact with, through
+  setup and run instructions in the repository or a hosted demo; a public
+  repository with a detectable open-source licence; and a video under three
+  minutes. Hosting is not required (D-013 stands). Judges would need their own
+  PayPal sandbox app and vault id (TD-009) and an AI key; no keys may be
+  committed.
+- **Agent smoke run, Increment 6b (done 2026-11-05 by the developer):** six
+  fictional tasks against the real model, pre-check only, no PayPal and no
+  attempts. The informed agent stayed within the limits (or declined) in all four
+  runs; the uninformed agent exceeded them in both runs and the pre-check blocked
+  both; the hidden instruction was not obeyed; about 1 cent a call. One sample of
+  a non-deterministic model (TD-025). Evidence:
+  docs/evidence/ai-drafting/AGENT_SMOKE_RESULTS.md.
+- **Next approved task:** None. Increment 7 (the UI) and Increment 8 (demo
+  hardening) each need their own proposal and approval.
+- **Next comprehension gate:** Increment 6b walkthrough.
 
 ## Evidence gates
 
@@ -122,8 +168,9 @@ Each increment needs separate approval.
 | 3 | PayPal adapter: token, vault check, create order, read order and authorization | Complete (d98e76e, 8fa99c5; merged in c900015); success path confirmed by the developer's sandbox smoke run |
 | 4 | Capture and void in the adapter, and the sandbox lifecycle run | Complete (e5ae3b4, 07ad473; merged in 27edf3d); the developer's `smoke --lifecycle` run passed every step (R2, R3 closed; E-1 closed) |
 | 5a | Gate core: mandates, attempts, audit log, authorize, settle, reconcile (no HTTP) | Complete (6fcfced, 5a40d0f); on feat/gate-store-and-api, not yet pushed |
-| 5b | Routes, synthetic catalogue, simulated-agent scenarios, end-to-end sandbox run | Implemented; the developer's `e2e` sandbox run passed every step (2026-11-05); awaiting walkthrough answers and commit |
-| 6 | AI mandate drafting | Not started; provider undecided |
+| 5b | Routes, synthetic catalogue, simulated-agent scenarios, end-to-end sandbox run | Complete (797652d, 6693e8a; merged in 959f1b4); the developer's `e2e` sandbox run passed every step |
+| 6a | AI mandate drafting: draft route, completeness check, warnings (Claude, D-024) | Complete (b717727, 74cfb9d); the developer's two `draft-smoke` runs against the real model passed |
+| 6b | A labelled AI shopping agent that proposes carts, checked by the same deterministic gate (D-025) | Implemented; the developer's `agent-smoke` run against the real model passed; awaiting commit |
 | 7 | Next.js frontend | Not started |
 | 8 | Demo hardening and publication review | Not started |
 
