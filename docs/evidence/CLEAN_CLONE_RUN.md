@@ -30,23 +30,26 @@ the vault (README steps 1 and 2), a capture, and a revoke-then-void. Those are P
 Do this in a new folder, with a new `apps/api/.env`, and follow only the README. If a step is
 missing, unclear or wrong, that is a README defect: note it here and I fix it.
 
-- [ ] Clone the repository (the public URL, once it is public) into a new folder.
-- [ ] `pnpm install`, `pnpm test`, `pnpm typecheck` pass.
-- [ ] README "Create the PayPal Sandbox pieces" works as written (note any step that does not,
+- [ x ] Clone the repository (the public URL, once it is public) into a new folder.
+- [ x ] `pnpm install`, `pnpm test`, `pnpm typecheck` pass.
+- [ x ] README "Create the PayPal Sandbox pieces" works as written (note any step that does not,
       for example a dashboard label that differs, or the vaulting setting).
-- [ ] The Postman steps 00.1, 01a.1, the manual approval, 01b.1 and 01b.2 give a vault id.
-- [ ] `apps/api/.env` filled as the README says, the API starts, the web app shows
+- [ x ] The Postman steps 00.1, 01a.1, the manual approval, 01b.1 and 01b.2 give a vault id.
+- [ x ] `apps/api/.env` filled as the README says, the API starts, the web app shows
       "Ostensia API available".
-- [ ] One **capture** (README "Try it", step 2), one **pre-check block** (step 3) and one
+- [ x ] One **capture** (README "Try it", step 2), one **pre-check block** (step 3) and one
       **revoke-then-void** (step 4) all behave as the README says.
-- [ ] Run once with `ANTHROPIC_API_KEY` empty: the UI says AI is off and the manual form still
+- [ x ] Run once with `ANTHROPIC_API_KEY` empty: the UI says AI is off and the manual form still
       works through a capture and a block (D-026 verification 2).
-- [ ] No credential appears in the repository, the README, screenshots or the video
+- [ x ] No credential appears in the repository, the README, screenshots or the video
       (D-026 verification 3).
 
-Result: (to be completed by the developer)
+Result (2026-11-07, reported by the developer, not observed by the assistant): the developer
+carried out the clean-clone run, ticked every item in the checklist above and reports that
+everything looked fine. This includes the run with no Anthropic key and the credential check
+(D-026 verification 2 and 3), as ticked by the developer.
 
-Steps the README got wrong or left out: (to be completed)
+Steps the README got wrong or left out: none reported by the developer.
 
 ## Publication review
 

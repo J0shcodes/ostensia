@@ -203,7 +203,7 @@ Each increment needs separate approval.
 | 7a | Next.js app: the /api rewrite (D-027) and the mandate screen (D-026 to D-029) | Complete (1230b97, f1bf31a); the developer's walkthrough is done and D-029 is Accepted; merged in bfd3e93 (PR #7) |
 | 7b | Frontend: proposal and result screens (D-030; guidelines section 12) | Implemented and verified (a browser run against the real API, then the developer's sandbox walkthrough); D-030 Accepted; committed in 02005a7, 4866086 and df0ae07; merged in bfd3e93 (PR #7) |
 | 7c | Frontend: the audit record and the list of attempts (D-031; guidelines section 13) | Implemented and verified by tests, a browser run on placeholder values and the developer's sandbox check (capture, void and list all passed, as reported by the developer); committed in 9d8de7a and 18f4c0a; merged in bfd3e93 (PR #7) |
-| 8 | Demo hardening and publication review (8a README and publication review, 8b the developer's clean-clone run, 8c video script and submission text) | 8a in progress on branch demo-hardening |
+| 8 | Demo hardening and publication review (8a README and publication review, 8b the developer's clean-clone run, 8c video script and submission text) | 8a done (README, publication review; committed on demo-hardening, not yet merged); 8b done as reported by the developer (README-only clean-clone run, no defects reported); 8c not started |
 
 ## Earlier generated code
 
