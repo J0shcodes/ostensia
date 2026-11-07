@@ -57,7 +57,8 @@ Revisit the relationship between pre-purchase policy enforcement and
 post-purchase dispute evidence after the hackathon. Do not build both
 as full products in the MVP.
 
-Mid-build validation (2026-11-05, docs/research/mid-build-validation/):
+Mid-build validation (2026-11-05, docs/research/mid-build-validation/, now on the
+research-archive branch):
 - Working audience hypothesis: developers and platforms building AI shopping
   agents that pay through PayPal, with the consumer as the demonstrated end user.
   It rests on product fit, not on willingness-to-pay or developer-demand evidence.
@@ -161,6 +162,9 @@ docs/research/archive/PayPal-AI-Hackathon-Research-2026-10-02.md
 is background, not an implementation specification.
 That file is not in the repository (Report 00, C6). Its contents cannot be
 checked.
+
+The mid-build validation reports (Reports 00 to 06) were moved off the default branch on
+2026-11-07. They remain, unchanged, on the research-archive branch and in the Git history.
 
 If a historical claim, an assumption or this summary conflicts with
 reproducible test evidence or current official documentation, stop and

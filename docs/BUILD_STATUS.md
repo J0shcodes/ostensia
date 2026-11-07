@@ -6,16 +6,12 @@ Last updated: 2026-11-07
 
 ## Status
 
-- **Current increment:** Increment 7c - the audit record and the list of attempts (D-031
-  Accepted; guidelines version 1.3, section 13). Implemented and verified on branch
-  feat/frontend (not committed); the developer's sandbox check passed; awaiting comprehension
-  confirmation and commit authorization. Before it: Increment 7b - the web app's proposal and result screens (D-030
-  Accepted; brand guidelines version 1.1, section 12). Implemented and verified on branch
-  feat/frontend (not committed). The developer's sandbox walkthrough is done
-  (docs/evidence/frontend/PROPOSAL_RESULT_WALKTHROUGH.md, Part 2); awaiting the comprehension
-  confirmation and commit authorization.
-  Increment 7a is complete (committed in 1230b97 and f1bf31a; D-029 Accepted). The audit
-  view is Increment 7c and needs its own proposal.
+- **Current increment:** Increment 8 - making Ostensia submittable, on branch demo-hardening
+  (from main at bfd3e93, which already holds Increments 7a to 7c, merged as PR #7). The plan
+  was approved on 2026-11-07 in three parts: 8a README and publication review (in progress),
+  8b the developer's clean-clone run (D-026 verification 1), 8c video script and submission
+  text. No code changes are planned. The frontend (7a to 7c) is complete, verified and merged:
+  D-029, D-030 and D-031 are Accepted.
 - **Passed:**
   - Repository audit (2026-10-29).
   - Directory rename, MIT license and decisions D-001 to D-005,
@@ -158,9 +154,9 @@ Last updated: 2026-11-07
   both; the hidden instruction was not obeyed; about 1 cent a call. One sample of
   a non-deterministic model (TD-025). Evidence:
   docs/evidence/ai-drafting/AGENT_SMOKE_RESULTS.md.
-- **Next approved task:** None. Increment 7c (the audit view) and Increment 8 (demo
-  hardening) each need their own proposal and approval.
-- **Next comprehension gate:** Increment 7c comprehension questions.
+- **Next approved task:** Increment 8a (README and publication review). 8b and 8c follow, each
+  after the developer's confirmation.
+- **Next comprehension gate:** Increment 8a (the README and the publication review).
 
 ## Evidence gates
 
@@ -200,14 +196,14 @@ Each increment needs separate approval.
 | 2b | Domain: final evaluation, PayPal status mappings, payment-action rules | Complete (d95cd6d, 6817a58; merged in 4484fc5) |
 | 3 | PayPal adapter: token, vault check, create order, read order and authorization | Complete (d98e76e, 8fa99c5; merged in c900015); success path confirmed by the developer's sandbox smoke run |
 | 4 | Capture and void in the adapter, and the sandbox lifecycle run | Complete (e5ae3b4, 07ad473; merged in 27edf3d); the developer's `smoke --lifecycle` run passed every step (R2, R3 closed; E-1 closed) |
-| 5a | Gate core: mandates, attempts, audit log, authorize, settle, reconcile (no HTTP) | Complete (6fcfced, 5a40d0f); on feat/gate-store-and-api, not yet pushed |
+| 5a | Gate core: mandates, attempts, audit log, authorize, settle, reconcile (no HTTP) | Complete (6fcfced, 5a40d0f); merged in 959f1b4 (PR #5) |
 | 5b | Routes, synthetic catalogue, simulated-agent scenarios, end-to-end sandbox run | Complete (797652d, 6693e8a; merged in 959f1b4); the developer's `e2e` sandbox run passed every step |
-| 6a | AI mandate drafting: draft route, completeness check, warnings (Claude, D-024) | Complete (b717727, 74cfb9d); the developer's two `draft-smoke` runs against the real model passed |
-| 6b | A labelled AI shopping agent that proposes carts, checked by the same deterministic gate (D-025) | Implemented; the developer's `agent-smoke` run against the real model passed; awaiting commit |
-| 7a | Next.js app: the /api rewrite (D-027) and the mandate screen (D-026 to D-029) | Complete (1230b97, f1bf31a); the developer's walkthrough is done and D-029 is Accepted; on feat/frontend, not pushed |
-| 7b | Frontend: proposal and result screens (D-030; guidelines section 12) | Implemented and verified (a browser run against the real API, then the developer's sandbox walkthrough); D-030 Accepted; uncommitted on feat/frontend; awaiting commit authorization |
-| 7c | Frontend: the audit record and the list of attempts (D-031; guidelines section 13) | Implemented and verified by tests, a browser run on placeholder values and the developer's sandbox check (capture, void and list all passed, as reported by the developer); uncommitted |
-| 8 | Demo hardening and publication review | Not started |
+| 6a | AI mandate drafting: draft route, completeness check, warnings (Claude, D-024) | Complete (b717727, 74cfb9d); the developer's two `draft-smoke` runs against the real model passed; merged in ccc380c (PR #6) |
+| 6b | A labelled AI shopping agent that proposes carts, checked by the same deterministic gate (D-025) | Complete (1242f79, 9c4293b); the developer's `agent-smoke` run against the real model passed; merged in ccc380c (PR #6) |
+| 7a | Next.js app: the /api rewrite (D-027) and the mandate screen (D-026 to D-029) | Complete (1230b97, f1bf31a); the developer's walkthrough is done and D-029 is Accepted; merged in bfd3e93 (PR #7) |
+| 7b | Frontend: proposal and result screens (D-030; guidelines section 12) | Implemented and verified (a browser run against the real API, then the developer's sandbox walkthrough); D-030 Accepted; committed in 02005a7, 4866086 and df0ae07; merged in bfd3e93 (PR #7) |
+| 7c | Frontend: the audit record and the list of attempts (D-031; guidelines section 13) | Implemented and verified by tests, a browser run on placeholder values and the developer's sandbox check (capture, void and list all passed, as reported by the developer); committed in 9d8de7a and 18f4c0a; merged in bfd3e93 (PR #7) |
+| 8 | Demo hardening and publication review (8a README and publication review, 8b the developer's clean-clone run, 8c video script and submission text) | 8a done (README, publication review; committed on demo-hardening, not yet merged); 8b done as reported by the developer (README-only clean-clone run, no defects reported); 8c not started |
 
 ## Earlier generated code
 
