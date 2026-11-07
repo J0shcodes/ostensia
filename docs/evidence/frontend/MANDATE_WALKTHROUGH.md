@@ -75,10 +75,9 @@ The developer ran sections A to F in a real browser and reported the following. 
 developer's own reports; the assistant did not observe them. The developer ticked A to E below;
 the two section F boxes are still for the developer to tick and fill in.
 - A, C, D, E: no problems.
-- B: the developer told the assistant the successful second attempt took about 16 to 18 s,
-  while the checklist line below says "about 5-10 seconds". The two figures differ and the
-  developer has not said which is right; both are well under the proxy's 120 s, and this is
-  one sample.
+- B: the successful second attempt took about 16 to 18 s (one sample; well under the proxy's
+  120 s). The checklist line below first said "about 5-10 seconds"; the developer confirmed
+  16 to 18 s is correct, and the line was corrected on 2026-11-06.
   A first attempt on a poor connection ended with "The AI service took too long to answer",
   the form was left untouched, and drafting worked once the network recovered. The developer
   recalls this at about 30 s and does not remember the exact time. The API's provider timeout is
@@ -97,7 +96,7 @@ Start the API with `ANTHROPIC_API_KEY` unset.
 - [ x ] Press "Draft with AI": the notice appears, the button is disabled, the form still works.
 
 ### B. With your Anthropic key (the part not yet exercised)
-- [ x ] Describe a purchase and press "Draft with AI". How long did it take? about 5-10 seconds
+- [ x ] Describe a purchase and press "Draft with AI". How long did it take? about 16-18 seconds
   (D-027 criterion 4: the proxy allows 120 s; this is the real draft route.)
 - [ x ] The dashed AI panel shows what the AI read, with the solid "Completeness check" inside it.
 - [ x ] "Use this draft in the form" fills the form; filled fields are marked "from AI draft"; nothing filled before you pressed it.

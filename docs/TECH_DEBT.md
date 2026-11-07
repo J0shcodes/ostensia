@@ -547,7 +547,12 @@ and capture, written up like E2E_RESULTS.md.
 Estimated future size: S
 Proposed resolution: Record that run in Increment 8, or keep the demo stopping at the pre-check.
 Review trigger: Before recording the video.
-Status: Open
+Resolution: The developer ran an AI agent cart through authorization and capture in the sandbox
+on 2026-11-07 (docs/evidence/frontend/PROPOSAL_RESULT_WALKTHROUGH.md, section F): the pre-check
+and the final check allowed it, and an order id, an authorization id and a capture id were
+produced. The checklist is taken as the record; it was not written up like E2E_RESULTS.md. It
+is one run of a non-deterministic model (TD-025), and the video must not claim more than that.
+Status: Resolved (2026-11-07)
 
 ## Item TD-027 — The source of a proposal is not recorded in the audit log
 
@@ -608,7 +613,8 @@ Current limitation: Nothing automated renders a component or clicks a button. Th
 are covered by the type checker, by scan tests (apps/web/web-boundaries.test.ts and
 brand.test.ts), by a production build, and by a browser run. The browser run in
 docs/evidence/frontend/MANDATE_WALKTHROUGH.md was a script kept outside the repository, so
-it cannot be repeated from a clone.
+it cannot be repeated from a clone. Increment 7b added eleven more component files, and its
+78-check browser script is outside the repository in the same way.
 Impact if left unresolved: A change to a component can break behaviour that no test notices,
 for example focus handling, the unclear-confirmation flow or the draft panel.
 Required evidence or dependency: A decision to add a test renderer, or to add the browser
@@ -632,9 +638,12 @@ Next.js cuts a proxied request at 30 s by default and answers a plain-text 500 (
 change it. A proxy cut-off does not cancel the request at the API. The page client stops
 waiting at 150 s. The API sets a 90 s timeout on its Anthropic client (apps/api/src/index.ts).
 (An earlier version of this item said the API set none; that was wrong.) Measured so far: one
-real draft took 16 to 18 s or 5 to 10 s (the developer gave both figures, 2026-11-06). One earlier attempt on a poor
+real draft took about 16 to 18 s (developer, 2026-11-06). One earlier attempt on a poor
 connection ended with the API's provider-timeout message, which the developer recalls at about
-30 s; that does not match the 90 s setting and is unexplained.
+30 s; that does not match the 90 s setting and is unexplained. The AI shopping agent's
+route (Increment 7b, POST /mandates/:id/agent-proposal) goes through the same proxy and the
+same 90 s provider timeout. The developer timed it once at about 3 to 5 s (2026-11-07, one
+sample; section F of the 7b walkthrough).
 Impact if left unresolved: A draft or agent call slower than 120 s is reported as unreachable
 although the API may still finish it. A Next.js upgrade could silently restore the 30 s limit.
 Required evidence or dependency: One timed real draft (checklist item B in
@@ -684,6 +693,47 @@ Estimated future size: S
 Proposed resolution: Move the constant into the domain package, or expose it from the API,
 when either is next changed.
 Review trigger: Any change to the draft route's limit.
+Status: Accepted for MVP
+
+## Item TD-034 — Four attempt statuses have no way forward in the API
+
+Date identified: 2026-11-06
+Related increment: Increment 7b
+Why it was deferred: Fixing it means changing the gate or the routes, which 7b does not touch
+(the developer approved "no API change in 7b", decision A4).
+Current limitation: An attempt in create_unknown, anomaly, write_rejected or conflict cannot be
+settled again or reconciled (settle only acts on "authorized"; reconcile only on write_unknown,
+capture_pending and write_refused; apps/api/src/gate/gate.ts). The web page can only report
+the state and say that a person must look at PayPal's record.
+Impact if left unresolved: In the demo these end states cannot be resolved from the UI. An
+order may exist at PayPal Sandbox with no way for Ostensia to close it.
+Required evidence or dependency: A decision on whether the gate should reconcile an unknown
+order creation, and what a person is allowed to do about an anomaly.
+Estimated future size: M
+Proposed resolution: After the hackathon, design recovery for these states (read the order,
+then settle or abandon), with the same write-ahead and single-write rules as D-022.
+Review trigger: Any sandbox run that reaches one of these statuses, or a production plan.
+Status: Accepted for MVP
+
+## Item TD-035 — Three lists in the web app are copies of lists in the API
+
+Date identified: 2026-11-06
+Related increment: Increment 7b
+Why it was deferred: The web app may not import from apps/api, and the domain does not hold
+these lists (apps/web/web-boundaries.test.ts).
+Current limitation: apps/web/lib/api-types.ts repeats the six simulated scenarios
+(apps/api/src/simulation/scenarios.ts), the two shop modes (apps/api/src/ai/shopper-prompt.ts)
+and the 19 attempt statuses (apps/api/src/gate/state.ts). apps/web/api-drift.test.ts reads the
+API's source as text and fails if any of them changes there and not here, and
+apps/web/lib/attempt-status.ts must describe every status. Nothing is unsafe if they drift:
+the server still decides, and an unknown status is shown as "unexpected", not as understood.
+Impact if left unresolved: A new API status makes the page refuse to show that attempt until
+the copy and its wording are updated.
+Required evidence or dependency: None.
+Estimated future size: S
+Proposed resolution: Move the three lists into the domain package, or publish them from the
+API, when either is next changed.
+Review trigger: Any change to the gate's statuses, the scenarios or the shop modes.
 Status: Accepted for MVP
 
 ## Template for later entries
