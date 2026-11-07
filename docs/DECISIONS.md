@@ -1805,7 +1805,8 @@ Date: 2026-11-05
 Status: Accepted (2026-11-06, by the developer; the clean-clone verification below is still to be done)
 Related increment: Increments 7 and 8
 Related findings: D-024 Context (the rules' access requirement, checked 2026-11-05); D-013
-(local-first); docs/research/mid-build-validation/06-research-to-implementation-decisions.md §6;
+(local-first); docs/research/mid-build-validation/06-research-to-implementation-decisions.md §6
+(on the research-archive branch, removed from the default branch on 2026-11-07);
 EV-01, EV-39, EV-40, EV-41, EV-42
 Related risks: A judge cannot run the payment path; credentials leaving the server; scope growth
 from hosting or authentication one week before the deadline
@@ -2019,7 +2020,7 @@ subject to verification). This record adds what the build and the browser runs s
 Related increment: Increment 7a (scaffold, the D-027 rewrite, the mandate screen)
 Related findings: D-006, D-026, D-027, D-028; docs/design/OSTENSIA_BRAND_GUIDELINES.md;
 docs/evidence/frontend/MANDATE_WALKTHROUGH.md; Reports 03, 04 and 06 in
-docs/research/mid-build-validation/
+docs/research/mid-build-validation/ (on the research-archive branch)
 Related risks: A proxy cutting off a slow AI call; a configuration value reaching the
 browser; client-side limits drifting from the gate's; a mandate created twice; a
 dependency added without need
