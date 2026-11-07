@@ -32,9 +32,20 @@ export function Button({ variant = "primary", busy = false, busyLabel, children,
 
 // A link that looks like the primary or secondary button, for moving to another page.
 // It is a real link: it can be opened in a new tab, and it is announced as a link.
-export function ButtonLink({ href, variant = "primary", children }: { readonly href: string; readonly variant?: "primary" | "secondary"; readonly children: ReactNode }) {
+export function ButtonLink({
+  href,
+  variant = "primary",
+  ariaLabel,
+  children,
+}: {
+  readonly href: string;
+  readonly variant?: "primary" | "secondary";
+  // When several links share the same words, a name that says which one this is.
+  readonly ariaLabel?: string;
+  readonly children: ReactNode;
+}) {
   return (
-    <Link href={href} className={`${styles["button"]} ${styles[variant]} ${styles["linkButton"]}`}>
+    <Link href={href} {...(ariaLabel === undefined ? {} : { "aria-label": ariaLabel })} className={`${styles["button"]} ${styles[variant]} ${styles["linkButton"]}`}>
       {children}
     </Link>
   );

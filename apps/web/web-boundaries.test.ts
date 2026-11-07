@@ -182,6 +182,7 @@ describe("safe rendering and honest interface (CLAUDE.md sections 7 and 8)", () 
   // PayPal call. From 7b the word appears, but only in the files that show or explain a
   // PayPal operation. The mandate-creation files must still never mention it.
   const MAY_MENTION_PAYPAL = new Set([
+    "components/audit-record.tsx",
     "components/decision-panel.tsx",
     "components/next-steps.tsx",
     "components/payment-panel.tsx",
@@ -190,6 +191,7 @@ describe("safe rendering and honest interface (CLAUDE.md sections 7 and 8)", () 
     "components/result-screen.tsx",
     "components/uncertain-notice.tsx",
     "lib/attempt-status.ts",
+    "lib/audit-record.ts",
     "lib/messages.ts",
   ]);
   const MANDATE_STEP = [

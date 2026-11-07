@@ -6,6 +6,7 @@ import type {
   Attempt,
   AttemptEnvelope,
   AttemptEventSummary,
+  AttemptList,
   AttemptStatus,
   AuthorizationFacts,
   Catalogue,
@@ -278,17 +279,41 @@ function parseExplanation(value: unknown): readonly string[] | null | undefined 
   return isStringArray(value) ? value : undefined;
 }
 
+function parseEventAuthorization(value: unknown): AttemptEventSummary["authorization"] | undefined {
+  if (!isRecord(value) || typeof value["statusRaw"] !== "string") return undefined;
+  const amount = value["amountMinor"] ?? null;
+  const customId = value["customId"] ?? null;
+  if (!isNullableNumber(amount) || !isNullableString(customId)) return undefined;
+  return { statusRaw: value["statusRaw"], amountMinor: amount, customId };
+}
+
+function parseEvent(entry: Record<string, unknown>, type: string): AttemptEventSummary {
+  const decision = isRecord(entry["decision"]) ? entry["decision"]["decision"] : undefined;
+  const authorization = parseEventAuthorization(entry["authorization"]);
+  const action = entry["action"];
+  return {
+    type,
+    outcome: typeof entry["outcome"] === "string" ? entry["outcome"] : null,
+    detail: typeof entry["detail"] === "string" ? entry["detail"] : null,
+    ...(typeof entry["at"] === "string" ? { at: entry["at"] } : {}),
+    ...(action === "capture" || action === "void" ? { action } : {}),
+    ...(decision === "allow" || decision === "block" ? { decision } : {}),
+    ...(isNullableString(entry["orderId"]) && entry["orderId"] !== undefined ? { orderId: entry["orderId"] } : {}),
+    ...(isNullableString(entry["authorizationId"]) && entry["authorizationId"] !== undefined ? { authorizationId: entry["authorizationId"] } : {}),
+    ...(isNullableString(entry["captureId"]) && entry["captureId"] !== undefined ? { captureId: entry["captureId"] } : {}),
+    ...(typeof entry["authorizationState"] === "string" ? { authorizationState: entry["authorizationState"] } : {}),
+    ...(authorization === undefined ? {} : { authorization }),
+    ...(typeof entry["result"] === "string" ? { result: entry["result"] } : {}),
+  };
+}
+
 function parseEvents(value: unknown): AttemptEventSummary[] | null | undefined {
   if (value === undefined) return null;
   if (!Array.isArray(value)) return undefined;
   const events: AttemptEventSummary[] = [];
   for (const entry of value) {
     if (!isRecord(entry) || typeof entry["type"] !== "string") return undefined;
-    events.push({
-      type: entry["type"],
-      outcome: typeof entry["outcome"] === "string" ? entry["outcome"] : null,
-      detail: typeof entry["detail"] === "string" ? entry["detail"] : null,
-    });
+    events.push(parseEvent(entry, entry["type"]));
   }
   return events;
 }
@@ -305,6 +330,19 @@ export function parseAttemptEnvelope(body: unknown): AttemptEnvelope | null {
   const events = parseEvents(body["events"]);
   if (precheck === undefined || final === undefined || events === undefined) return null;
   return { attempt, explanation: { precheck, final }, events };
+}
+
+function parseAttemptList(body: unknown): AttemptList | null {
+  if (!isRecord(body) || !Array.isArray(body["attempts"])) return null;
+  const attempts: Attempt[] = [];
+  for (const entry of body["attempts"]) {
+    const attempt = parseAttempt(entry);
+    // One record this page does not understand is reported, not skipped: a list with a
+    // hole in it would look like a complete one.
+    if (attempt === null) return null;
+    attempts.push(attempt);
+  }
+  return { attempts };
 }
 
 const RECONCILE_OUTCOMES: readonly ReconcileOutcome[] = ["captured", "voided", "conflict", "unchanged", "not_applicable"];
@@ -335,6 +373,7 @@ export type ApiClient = {
   simulatedProposal(mandateId: string, scenario: Scenario): Promise<ApiResult<SimulatedProposalResponse>>;
   agentProposal(mandateId: string, mode: ShopMode, task?: string): Promise<ApiResult<AgentProposalResponse>>;
   createAttempt(request: AttemptRequest): Promise<ApiResult<AttemptEnvelope>>;
+  listAttempts(): Promise<ApiResult<AttemptList>>;
   getAttempt(attemptId: string): Promise<ApiResult<AttemptEnvelope>>;
   settleAttempt(attemptId: string): Promise<ApiResult<AttemptEnvelope>>;
   reconcileAttempt(attemptId: string): Promise<ApiResult<ReconcileEnvelope>>;
@@ -428,6 +467,7 @@ export function createApiClient(options: { readonly fetcher?: Fetcher; readonly 
         },
         parseAttemptEnvelope,
       ),
+    listAttempts: () => call("GET", "/attempts", undefined, parseAttemptList),
     getAttempt: (attemptId) => call("GET", `/attempts/${seg(attemptId)}`, undefined, parseAttemptEnvelope),
     settleAttempt: (attemptId) => call("POST", `/attempts/${seg(attemptId)}/settle`, undefined, parseAttemptEnvelope),
     reconcileAttempt: (attemptId) => call("POST", `/attempts/${seg(attemptId)}/reconcile`, undefined, parseReconcile),

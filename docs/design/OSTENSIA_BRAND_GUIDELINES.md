@@ -3,8 +3,9 @@
 Status: Approved (2026-11-06, by the developer). Section 12 (proposal and result screens,
 Increment 7b) and its four proposed conventions (12.7) were approved by the developer on
 2026-11-06.
-Version: 1.2 (1.1 added section 12; 1.2 added field placeholders, approved by the developer on
-2026-11-07)
+Version: 1.3 (1.1 added section 12; 1.2 added field placeholders, approved by the developer on
+2026-11-07; 1.3 added section 13, the audit record and the list of attempts, approved by the
+developer on 2026-11-07)
 Scope: the visual identity and interface language of the Ostensia frontend (apps/web).
 Decision record: D-028 (docs/DECISIONS.md)
 Required reading: CLAUDE.md section 14 requires reading this document before making or
@@ -318,8 +319,8 @@ Constraints:
 
 ## 12. Proposal and result screens (Increment 7b)
 
-Scope: steps 2 and 3 of the step indicator. The audit timeline and the list of all
-attempts are a later increment (7c) and are not specified here. Sections 1 to 11 still
+Scope: steps 2 and 3 of the step indicator. The audit record and the list of all
+attempts are specified in section 13 (Increment 7c). Sections 1 to 11 still
 apply; this section adds screens and states, and the few new conventions listed
 at the end for approval. No new colour, font, icon or spacing value is introduced.
 
@@ -469,3 +470,120 @@ record", "Check status", "Try again", and their running labels ("Building…", "
 are unchanged. Prohibited claims in section 10 apply to every new string; in particular the
 interface never says that the AI approved or paid, and never says that PayPal enforced the
 mandate.
+
+## 13. Audit record and list of attempts (Increment 7c)
+
+Scope: what Ostensia logged for one attempt, and a page that lists every attempt. Sections 1
+to 12 still apply. Approved by the developer on 2026-11-07 (the proposal and its six
+recommended decisions). No new colour, font, icon, spacing value or API change is introduced.
+
+### 13.1 Where things are
+- The audit record is a fourth panel, "Audit record", on the result page (`/attempts/{id}`),
+  directly under the cart. It is a plain card (no source treatment of its own), because it
+  holds entries from different sources and sources are never merged into one panel
+  (section 7). Its text: "What Ostensia logged for this attempt, oldest first."
+- `/attempts` lists every attempt. It is not a step, so it has no step indicator. Its title
+  is "Purchase attempts" and its line is "Every attempt Ostensia knows about, newest first.
+  Open one to see the decision, the payment and the audit record."
+- The result page and the proposal page each end with a text link "All purchase attempts".
+  The header is unchanged (section 5).
+
+### 13.2 An audit entry
+Entries are an ordered list, oldest first, in the order the log holds them. Each entry is a
+nested provenance panel (section 7, as in 12.2): the title is the entry's title, the badge
+and treatment follow its source. Inside, top to bottom:
+1. the time in the person's own time zone with seconds, and the same instant in UTC in the
+   monospace face;
+2. the line (14/400);
+3. where the log holds it, the API's explanation of the decision as a list (the domain's own
+   words, not rewritten); it is shown on the latest pre-check and the latest final check
+   only, because the API sends one explanation of each;
+4. facts, label and value, with ids shortened in the middle in the monospace face and a Copy
+   control (section 4): "Order ID", "Authorization ID", "Capture ID", "Amount" (no Copy) and
+   "Reference stored with the payment";
+5. the gate's own short detail, exactly as recorded, in the monospace face, when there is one.
+
+### 13.3 Source of an entry
+- "PayPal Sandbox" (3px left rule and badge) only on an entry that reflects a request that
+  was sent to PayPal: an order or write whose outcome is not "not_sent", a read of the
+  authorization, a read of PayPal's record. This is the rule 7b uses for the Payment panel.
+- "Checked by Ostensia" on everything Ostensia decided or recorded itself, including a
+  request that was not sent.
+- An entry of a kind the page does not know has no badge and is shown with its type, never
+  hidden.
+- The panel states, as notes: "Each PayPal request is recorded before it is sent." and
+  "Ostensia's audit log does not record where a cart came from." (TD-027).
+- When the response holds no entries, the panel says: "No records are available for this
+  attempt."
+
+### 13.4 Wording of the entries
+One row per kind of entry and outcome. `{state}`, `{status}`, `{action}` and `{Action}` are
+filled in from the record (`{Action}` is `{action}` with a capital first letter);
+brand.test.ts compares this table with the code word for word. The "Source" column says
+which treatment the entry gets (13.3): "Ostensia" is "Checked by Ostensia", "PayPal" is
+"PayPal Sandbox", "none" has no badge.
+
+| Entry | Source | Title | Line |
+|---|---|---|---|
+| attempt_started | Ostensia | Attempt started | Ostensia recorded the cart and the mandate it is checked against. |
+| precheck_decided:allow | Ostensia | Pre-check: allowed | Made before anything was sent to PayPal. |
+| precheck_decided:block | Ostensia | Pre-check: blocked | Made before anything was sent to PayPal. |
+| integrity_failed | Ostensia | Mandate reference check failed | The stored mandate no longer matches its reference. |
+| order_requested | Ostensia | About to create the PayPal order | Recorded before the request was sent. |
+| order_result:created | PayPal | Order created | PayPal Sandbox created the order and returned one authorization. |
+| order_result:anomaly | PayPal | Order needs a person | PayPal Sandbox created an order but did not return exactly one authorization. |
+| order_result:rejected | PayPal | Order refused | PayPal Sandbox did not create the order. |
+| order_result:unknown | PayPal | No answer to the order request | Ostensia did not get PayPal's answer. The order may exist. |
+| order_result:not_sent | Ostensia | Order not sent | Ostensia could not send the request to PayPal Sandbox. Nothing was created. |
+| authorization_read | PayPal | Authorization read | PayPal reports the authorization as {status}. |
+| settle_read_failed | PayPal | Could not read the authorization | Nothing was written. |
+| settle_read_failed:no_access | Ostensia | Could not reach PayPal Sandbox | Ostensia could not get access to PayPal Sandbox, so nothing was read or written. |
+| final_decided:allow | Ostensia | Final check: allowed | Made after Ostensia read the authorization from PayPal Sandbox. |
+| final_decided:block | Ostensia | Final check: blocked | Made after Ostensia read the authorization from PayPal Sandbox. |
+| write_requested | Ostensia | About to {action} | Recorded before the request was sent. |
+| write_result:captured | PayPal | Captured | PayPal Sandbox captured the payment. |
+| write_result:capture_pending | PayPal | Capture pending | PayPal Sandbox accepted the capture but has not completed it. |
+| write_result:voided | PayPal | Voided | PayPal Sandbox voided the authorization. Nothing was captured. |
+| write_result:refused | PayPal | Already settled | PayPal Sandbox reports this authorization as already settled. |
+| write_result:rejected | PayPal | Rejected by PayPal | Nothing was captured or voided. |
+| write_result:unknown | PayPal | No answer to the {action} request | Ostensia did not get PayPal's answer and will not send it again. |
+| write_result:not_sent | Ostensia | {Action} not sent | Ostensia could not send the request to PayPal Sandbox. Nothing was written. |
+| no_action | Ostensia | Nothing sent | The authorization was {state}, so Ostensia sent nothing. |
+| reconciled:captured | PayPal | PayPal's record read | PayPal's record shows the payment was captured. |
+| reconciled:voided | PayPal | PayPal's record read | PayPal's record shows the authorization was voided. |
+| reconciled:conflict | PayPal | PayPal's record read | PayPal's record does not match what Ostensia asked for. A person needs to look at it. |
+| reconciled:unchanged | PayPal | PayPal's record read | PayPal's record does not settle it yet. Check again later. |
+| unknown | none | Unrecognised event | Ostensia does not know this kind of record: {type}. |
+
+The prohibited claims of section 10 apply to every entry. In particular the record never
+says that a reference proves identity, consent or authorization: "Reference stored with the
+payment" names where the value was kept and nothing more.
+
+### 13.5 The list of attempts
+- A list, newest first by start time, not tiles or a table (section 11). Each row is a
+  bordered row on a white surface, with: "Started" and the time (as in 13.2), the status icon
+  and label in the status colour (12.5), "Declared total" and the total in the "$12.34 USD"
+  form, "Mandate" and its id shortened in the monospace face, and a link "View result" whose
+  accessible name includes the attempt id.
+- Empty: "No purchase attempts yet." with a link "Create a mandate".
+- The list cannot be loaded: a danger callout "Ostensia could not load the attempts. Nothing
+  was changed." with the secondary button "Check status".
+- Below 640px each row stacks and the page never scrolls sideways.
+
+### 13.6 What the record does not show
+- When a mandate was revoked: the log records that event for the mandate, not for an attempt
+  (TD-036). A void shows the final check ("revoked"), not the moment of the revocation.
+- Where a cart came from (TD-027).
+
+### 13.7 Accessibility and responsive
+- The record is an ordered list; the page title takes focus as in 12.6; every Copy control
+  has a name that says what it copies; nothing relies on colour alone (each entry has a
+  badge in words, or none).
+- Below 640px entries and rows stack, buttons are full width, touch targets are at least
+  40px.
+
+### 13.8 New conventions (approved 2026-11-07)
+1. The audit record: an ordered list of nested provenance panels inside a plain card.
+2. The compact status indicator: the icon and label of 12.5 without the explanation line,
+   used in the list rows.
+3. The list row of 13.5.

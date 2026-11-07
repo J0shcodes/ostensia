@@ -12,6 +12,7 @@ import {
   AUTHORIZE_HELP,
   BUSY,
   LABELS,
+  LINK_ALL_ATTEMPTS,
   PROPOSAL_INTRO,
   PROPOSAL_TITLE,
   SETTLE_HELP,
@@ -301,6 +302,10 @@ export function ProposalScreen({ mandateId }: { readonly mandateId: string }) {
           ) : null}
         </>
       ) : null}
+
+      <p className={styles["note"]}>
+        <Link href="/attempts">{LINK_ALL_ATTEMPTS}</Link>
+      </p>
     </main>
   );
 }

@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { formatLocalInstant, isInPast, localInputToUtcIso, utcIsoToLocalInput } from "./datetime.ts";
+import { formatLocalInstant, formatLocalInstantSeconds, formatUtcInstant, isInPast, localInputToUtcIso, utcIsoToLocalInput } from "./datetime.ts";
 
 // Every expectation here depends on a time zone, so the tests pin one instead of using
 // whatever the machine is set to. New York has both daylight-saving edges in 2026
@@ -107,5 +107,21 @@ describe("isInPast", () => {
   });
   it("is false for something that is not a date", () => {
     expect(isInPast("nope", now)).toBe(false);
+  });
+});
+
+describe("the audit record times", () => {
+  it("shows the person's own time zone to the second", () => {
+    // 2026-11-07 14:03:21 UTC is 09:03:21 in New York (UTC-5 after 1 November).
+    expect(formatLocalInstantSeconds("2026-11-07T14:03:21.000Z", "en-US")).toContain("9:03:21");
+  });
+
+  it("shows the same instant in UTC, whatever the time zone", () => {
+    expect(formatUtcInstant("2026-11-07T14:03:21.456Z")).toBe("2026-11-07 14:03:21 UTC");
+  });
+
+  it("returns a value that is not a time as it came", () => {
+    expect(formatLocalInstantSeconds("not a time")).toBe("not a time");
+    expect(formatUtcInstant("not a time")).toBe("not a time");
   });
 });

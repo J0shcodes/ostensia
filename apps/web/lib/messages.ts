@@ -300,3 +300,16 @@ export function describeAttemptDetail(
   if (result.kind === "unexpected") return "The Ostensia API sent a response this page does not understand.";
   return describeApiError(result.error);
 }
+
+// ----- Increment 7c: the audit record and the list of attempts (guidelines section 13) -----
+export const AUDIT_TITLE = "Audit record";
+export const AUDIT_INTRO = "What Ostensia logged for this attempt, oldest first.";
+export const AUDIT_REQUEST_NOTE = "Each PayPal request is recorded before it is sent.";
+export const AUDIT_EMPTY = "No records are available for this attempt.";
+export const ATTEMPTS_TITLE = "Purchase attempts";
+export const ATTEMPTS_INTRO =
+  "Every attempt Ostensia knows about, newest first. Open one to see the decision, the payment and the audit record.";
+export const ATTEMPTS_EMPTY = "No purchase attempts yet.";
+export const ATTEMPTS_ERROR = "Ostensia could not load the attempts. Nothing was changed.";
+export const LINK_ALL_ATTEMPTS = "All purchase attempts";
+export const LINK_VIEW_RESULT = "View result";

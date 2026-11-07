@@ -79,6 +79,21 @@ export function formatLocalInstant(iso: string, locale?: string): string {
   return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(date);
 }
 
+// The audit record shows when each event was written, to the second, in the person's own
+// time zone and in UTC (guidelines section 13.2). A value that is not a time is returned
+// as it came, never hidden.
+export function formatLocalInstantSeconds(iso: string, locale?: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "medium" }).format(date);
+}
+
+export function formatUtcInstant(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return `${date.toISOString().slice(0, 19).replace("T", " ")} UTC`;
+}
+
 export function isInPast(iso: string, now: number): boolean {
   const time = new Date(iso).getTime();
   return !Number.isNaN(time) && time <= now;

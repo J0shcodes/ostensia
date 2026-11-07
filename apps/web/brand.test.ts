@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { ATTEMPT_STATUSES } from "./lib/api-types.ts";
 import { STATUS_PRESENTATION } from "./lib/attempt-status.ts";
+import { AUDIT_WORDING } from "./lib/audit-record.ts";
 import {
   AGENT_MODE_INFORMED,
   AGENT_MODE_UNINFORMED,
@@ -14,11 +15,21 @@ import {
   API_AVAILABLE,
   API_UNREACHABLE,
   ATTEMPT_MISSING,
+  ATTEMPTS_EMPTY,
+  ATTEMPTS_ERROR,
+  ATTEMPTS_INTRO,
+  ATTEMPTS_TITLE,
   ATTEMPT_UNCERTAIN,
+  AUDIT_EMPTY,
+  AUDIT_INTRO,
+  AUDIT_REQUEST_NOTE,
+  AUDIT_TITLE,
   AUTHORIZE_HELP,
   BUSY,
   DISCLOSURE,
   LABELS,
+  LINK_ALL_ATTEMPTS,
+  LINK_VIEW_RESULT,
   NOT_SENT_TO_PAYPAL,
   PAGE_INTRO,
   PLACEHOLDERS,
@@ -379,5 +390,92 @@ describe("field placeholders (guidelines sections 6 and 10)", () => {
 
   it("states that a placeholder is never a default and never replaces the label", () => {
     expect(document).toContain("It shows only while the field is empty, is never a default, and never replaces the label or the help text.");
+  });
+});
+
+describe("audit record and list of attempts (guidelines section 13)", () => {
+  const flat = (text: string): string => text.replace(/\s+/g, " ");
+  const document = flat(GUIDELINES);
+  const section13 = document.slice(document.indexOf("## 13. Audit record and list of attempts"));
+  const css = (name: string): string => readFileSync(join(WEB, "components", name), "utf8");
+
+  it("is part of the approved specification", () => {
+    expect(GUIDELINES).toMatch(/^Version: 1\.[3-9]/m);
+    expect(document).toContain("1.3 added section 13");
+    expect(GUIDELINES).not.toContain("PROPOSED");
+    expect(section13.length).toBeGreaterThan(1000);
+  });
+
+  it.each([
+    ["the audit record title", AUDIT_TITLE],
+    ["the audit record introduction", AUDIT_INTRO],
+    ["the request-recorded note", AUDIT_REQUEST_NOTE],
+    ["the empty-record line", AUDIT_EMPTY],
+    ["the list title", ATTEMPTS_TITLE],
+    ["the list introduction", ATTEMPTS_INTRO],
+    ["the empty-list line", ATTEMPTS_EMPTY],
+    ["the list error", ATTEMPTS_ERROR],
+    ["the all-attempts link", LINK_ALL_ATTEMPTS],
+    ["the view-result link", LINK_VIEW_RESULT],
+    ["the source-not-recorded note", SOURCE_NOT_RECORDED],
+  ])("%s matches the guidelines word for word", (_name, text) => {
+    expect(section13).toContain(flat(text));
+  });
+
+  // The wording table in 13.4, row by row: | entry | source | title | line |
+  const ROW = /^\|\s*([a-z_]+(?::[a-z_]+)?)\s*\|\s*(Ostensia|PayPal|none)\s*\|\s*([^|]+?)\s*\|\s*(.+?)\s*\|$/;
+  const rows = GUIDELINES.split("\n").flatMap((line) => {
+    const match = ROW.exec(line);
+    return match === null ? [] : [{ key: match[1] ?? "", source: match[2] ?? "", title: match[3] ?? "", line: match[4] ?? "" }];
+  });
+  const SOURCE = { Ostensia: "ostensia", PayPal: "paypal", none: "none" } as const;
+
+  it("reads the wording table", () => {
+    expect(rows.length).toBe(Object.keys(AUDIT_WORDING).length);
+    expect(rows.length).toBeGreaterThanOrEqual(29);
+  });
+
+  it("describes every entry exactly once, no more and no fewer than the code", () => {
+    expect(rows.map((row) => row.key).sort()).toEqual(Object.keys(AUDIT_WORDING).sort());
+  });
+
+  it.each(Object.keys(AUDIT_WORDING).map((key) => [key]))("%s has the source, title and line the guidelines give", (key) => {
+    const row = rows.find((candidate) => candidate.key === key);
+    expect(row, key).toBeDefined();
+    const shown = AUDIT_WORDING[key];
+    expect(shown?.source).toBe(SOURCE[row?.source as keyof typeof SOURCE]);
+    expect(shown?.title).toBe(row?.title);
+    expect(flat(shown?.line ?? "")).toBe(flat(row?.line ?? ""));
+  });
+
+  it("gives the PayPal Sandbox treatment only to entries that reflect a request that was sent", () => {
+    // A request that was not sent is never drawn as a PayPal operation (section 7).
+    for (const [key, row] of Object.entries(AUDIT_WORDING)) {
+      if (key.endsWith(":not_sent") || key.endsWith(":no_access")) expect(row.source, key).toBe("ostensia");
+    }
+    // Everything recorded before a request is sent is Ostensia's own.
+    for (const key of ["order_requested", "write_requested"]) expect(AUDIT_WORDING[key]?.source, key).toBe("ostensia");
+  });
+
+  it("states that a stored reference proves nothing and names no claim section 10 prohibits", () => {
+    expect(section13).toContain("never says that a reference proves identity, consent or authorization");
+    const shown = Object.values(AUDIT_WORDING)
+      .map((row) => `${row.title} ${row.line}`)
+      .join(" ")
+      .toLowerCase();
+    expect(shown).not.toMatch(/ai approved|ai paid|paypal enforce|production-ready|real money|released immediately|proves/);
+  });
+
+  it("shows the compact status indicator without its explanation line, and stacks the list rows below 640px", () => {
+    expect(section13).toContain("The compact status indicator: the icon and label of 12.5 without the explanation line");
+    expect(readFileSync(join(WEB, "components", "status-indicator.tsx"), "utf8")).toMatch(/compact \? null : <p className=\{styles\["line"\]\}/);
+    expect(css("attempts-list.module.css")).toMatch(/@media \(max-width: 639px\)\s*\{[\s\S]*\.row\s*\{\s*grid-template-columns:\s*minmax\(0, 1fr\);/);
+  });
+
+  it("takes every colour and spacing value from the tokens, never a raw one", () => {
+    for (const name of ["attempts-list.module.css", "audit-record.module.css"]) {
+      expect(css(name), name).not.toMatch(/#[0-9A-Fa-f]{3,8}\b/);
+      expect(css(name), name).not.toMatch(/\brgba?\(/);
+    }
   });
 });

@@ -135,12 +135,34 @@ export type Attempt = {
   readonly updatedAt: string;
 };
 
-// The audit events of an attempt, reduced to what the page uses to say whether PayPal
-// was called. The full timeline is a later increment.
+// The audit events of an attempt, as much of each as the page shows: the audit record
+// (guidelines section 13) and the check that says whether PayPal was called. Every field
+// beyond the first three is present only on the kinds of event that carry it
+// (apps/api/src/gate/events.ts), and none of them is a secret or a raw response.
 export type AttemptEventSummary = {
   readonly type: string;
   readonly outcome: string | null;
   readonly detail: string | null;
+  // When the gate wrote the event (UTC, ISO 8601).
+  readonly at?: string;
+  // write_requested and write_result.
+  readonly action?: "capture" | "void";
+  // precheck_decided, final_decided and integrity_failed: the outcome only; the words come
+  // from the API's explanation.
+  readonly decision?: "allow" | "block";
+  readonly orderId?: string | null;
+  readonly authorizationId?: string | null;
+  readonly captureId?: string | null;
+  // no_action and reconciled.
+  readonly authorizationState?: string;
+  // authorization_read.
+  readonly authorization?: {
+    readonly statusRaw: string;
+    readonly amountMinor: number | null;
+    readonly customId: string | null;
+  };
+  // reconciled: captured, voided, conflict or unchanged.
+  readonly result?: string;
 };
 
 export type AttemptEnvelope = {
@@ -155,3 +177,6 @@ export type AttemptEnvelope = {
 
 export type ReconcileOutcome = "captured" | "voided" | "conflict" | "unchanged" | "not_applicable";
 export type ReconcileEnvelope = AttemptEnvelope & { readonly outcome: ReconcileOutcome };
+
+// GET /attempts: every attempt the gate knows, without events.
+export type AttemptList = { readonly attempts: readonly Attempt[] };

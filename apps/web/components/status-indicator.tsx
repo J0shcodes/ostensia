@@ -17,15 +17,16 @@ const ICON: Record<Tone, IconName> = {
   progress: "clock",
 };
 
-export function StatusIndicator({ status }: { readonly status: AttemptStatus }) {
+// `compact` is the icon and the label only, for a row in a list (guidelines section 13.5).
+export function StatusIndicator({ status, compact = false }: { readonly status: AttemptStatus; readonly compact?: boolean }) {
   const { label, tone, line } = presentStatus(status);
   return (
-    <div className={`${styles["indicator"]} ${styles[tone]}`} role="status">
+    <div className={`${styles["indicator"]} ${styles[tone]}`} {...(compact ? {} : { role: "status" })}>
       <p className={styles["label"]}>
         <Icon name={ICON[tone]} />
         <span>{label}</span>
       </p>
-      <p className={styles["line"]}>{line}</p>
+      {compact ? null : <p className={styles["line"]}>{line}</p>}
     </div>
   );
 }

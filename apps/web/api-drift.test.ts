@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { ATTEMPT_STATUSES, SCENARIOS, SHOP_MODES } from "./lib/api-types.ts";
+import { AUDIT_WORDING } from "./lib/audit-record.ts";
 
 // The web app copies three lists from the API because it may not import from apps/api
 // (web-boundaries.test.ts). This test reads the API's source as text, which is not an
@@ -47,5 +48,60 @@ describe("the lists copied from the API", () => {
   it("matches the one status the gate settles", () => {
     const text = source("gate/gate.ts");
     expect(text).toContain('attempt.status !== "authorized"');
+  });
+});
+
+describe("the audit record against the events the gate writes (apps/api/src/gate/events.ts)", () => {
+  const events = source("gate/events.ts");
+  const types = [...events.matchAll(/type: z\.literal\("([a-z_]+)"\)/g)].map((match) => match[1] ?? "");
+
+  // Events that belong to a mandate, not to an attempt: GET /attempts/:id never sends them.
+  const NOT_ATTEMPT_EVENTS = ["mandate_created", "mandate_revoked"];
+
+  it("finds the event types it is meant to compare", () => {
+    expect(types.length).toBeGreaterThanOrEqual(14);
+    expect(types).toContain("write_result");
+  });
+
+  it("describes every kind of event the gate writes for an attempt, so none is shown as unrecognised", () => {
+    const described = new Set(Object.keys(AUDIT_WORDING).map((key) => key.split(":")[0]));
+    for (const type of types) {
+      if (NOT_ATTEMPT_EVENTS.includes(type)) continue;
+      expect(described.has(type), `${type} has no row in the audit wording table`).toBe(true);
+    }
+  });
+
+  it("describes every outcome of an order and of a write", () => {
+    const outcomes = (type: string): string[] => {
+      const start = events.indexOf(`type: z.literal("${type}")`);
+      const block = /outcome: z\.enum\(\[([^\]]*)\]\)/.exec(events.slice(start));
+      return quoted(block?.[1] ?? "");
+    };
+    for (const type of ["order_result", "write_result"]) {
+      const found = outcomes(type);
+      expect(found.length, type).toBeGreaterThan(3);
+      for (const outcome of found) expect(AUDIT_WORDING[`${type}:${outcome}`], `${type}:${outcome}`).toBeDefined();
+    }
+  });
+
+  it("describes every result of reading PayPal's record again", () => {
+    const start = events.indexOf('type: z.literal("reconciled")');
+    const block = /result: z\.enum\(\[([^\]]*)\]\)/.exec(events.slice(start));
+    const results = quoted(block?.[1] ?? "");
+    expect(results.length).toBeGreaterThan(2);
+    for (const result of results) expect(AUDIT_WORDING[`reconciled:${result}`], result).toBeDefined();
+  });
+
+  it("describes both decisions of the checks", () => {
+    for (const type of ["precheck_decided", "final_decided"]) {
+      expect(AUDIT_WORDING[`${type}:allow`], type).toBeDefined();
+      expect(AUDIT_WORDING[`${type}:block`], type).toBeDefined();
+    }
+  });
+
+  it("sends events with GET /attempts/:id and not with the list", () => {
+    const routes = source("routes/attempts.ts");
+    expect(routes).toMatch(/app\.get\("\/attempts", async \(\) => \(\{ attempts: gate\.listAttempts\(\) \}\)\)/);
+    expect(routes).toContain("events: gate.eventsFor(attempt.attemptId)");
   });
 });

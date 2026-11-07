@@ -7,8 +7,9 @@ import { parseAttemptEnvelope } from "../lib/api.ts";
 import type { AttemptEnvelope } from "../lib/api-types.ts";
 import { RECONCILE_TEXT, paypalWasCalled, presentStatus, reachedPayPal, unsentNotice } from "../lib/attempt-status.ts";
 import { api } from "../lib/client.ts";
-import { LABELS, SOURCE_NOT_RECORDED, describeAttemptDetail, describeAttemptRefusal } from "../lib/messages.ts";
+import { LABELS, LINK_ALL_ATTEMPTS, SOURCE_NOT_RECORDED, describeAttemptDetail, describeAttemptRefusal } from "../lib/messages.ts";
 import { recallCartSource } from "../lib/session-memory.ts";
+import { AuditRecord } from "./audit-record.tsx";
 import { Callout } from "./callout.tsx";
 import type { CalloutTone } from "./callout.tsx";
 import { CartView } from "./cart-view.tsx";
@@ -206,6 +207,9 @@ export function ResultScreen({ attemptId }: { readonly attemptId: string }) {
       ) : null}
 
       {load.kind === "ok" ? <Attempt envelope={load.envelope} attemptId={attemptId} products={products} mandate={mandate} busy={busy} confirmRevoke={confirmRevoke} notice={notice} uncertain={uncertain} onSettle={() => void settle()} onReconcile={() => void reconcile()} onAskRevoke={() => setConfirmRevoke(true)} onKeep={() => setConfirmRevoke(false)} onRevoke={() => void revoke()} onCheckStatus={() => void checkStatus()} /> : null}
+      <p className={styles["note"]}>
+        <Link href="/attempts">{LINK_ALL_ATTEMPTS}</Link>
+      </p>
     </main>
   );
 }
@@ -284,6 +288,8 @@ function Attempt({ envelope, attemptId, products, mandate, busy, confirmRevoke, 
           <CartView proposal={attempt.proposal} products={products} />
         </div>
       </Panel>
+
+      <AuditRecord envelope={envelope} />
 
       <p className={styles["note"]}>
         Attempt ID <span className={styles["mono"]}>{attempt.attemptId}</span>
