@@ -1073,6 +1073,32 @@ Payment panel, 1px border, no badge, "Order not created"); the mutation checks t
 ### Questions I still cannot answer
 - (To be written by the developer.)
 
+## Topic: A log is a record you describe, not one you tidy
+
+### Plain-language explanation
+The audit record turns each event the gate wrote into a sentence. It keeps the log's order, shows every event (an unknown kind is shown as unrecognised), and never decides anything. A PayPal badge goes only on an entry for a request that was sent.
+
+### Where it appears in Ostensia
+apps/web/lib/audit-record.ts (the wording table and buildAuditRecord), components/audit-record.tsx, guidelines section 13.4, and the drift test in apps/web/api-drift.test.ts.
+
+### Why this design was selected
+A record people use to check the gate must not hide, reorder or flatter what happened. One table, compared with the guidelines word for word, keeps the wording honest.
+
+### Alternative
+Show only the status and the explanation, as 7b did. That answers "what happened" but not "in what order, and what did PayPal say".
+
+### Failure case
+The gate adds an event type the page does not describe. The drift test fails, and until then the page shows "Unrecognised event" with its type.
+
+### Evidence
+apps/web/lib/audit-record.test.ts, apps/web/brand.test.ts (section 13), apps/web/api-drift.test.ts.
+
+### Explain it to a judge
+(For the developer to write in their own words.)
+
+### Questions I still cannot answer
+(For the developer.)
+
 ## Template for later entries
 
 ## Topic: [Concept]

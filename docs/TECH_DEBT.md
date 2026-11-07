@@ -736,6 +736,24 @@ API, when either is next changed.
 Review trigger: Any change to the gate's statuses, the scenarios or the shop modes.
 Status: Accepted for MVP
 
+## Item TD-036 — A mandate's revocation is not part of an attempt's audit record
+
+Date identified: 2026-11-07
+Related increment: Increment 7c
+Why it was deferred: mandate_revoked is an event of the mandate, not of an attempt, so
+GET /attempts/:id (gate.eventsFor) never returns it. Showing it needs an API change, which the
+7c plan excluded.
+Current limitation: after a revoke and a settle, the record shows the final check ("the
+mandate has been revoked") and the void, but not when the revocation happened.
+Impact if left unresolved: the demo cannot show the moment of revocation in the record; the
+result page's own notice says it.
+Required evidence or dependency: None.
+Estimated future size: S
+Proposed resolution: Have the attempt route also return the events of the attempt's mandate
+(mandate_created, mandate_revoked), and add them to the wording table.
+Review trigger: A request to show revocation in the record.
+Status: Accepted for MVP
+
 ## Template for later entries
 
 ## Item TD-NNN — [Title]

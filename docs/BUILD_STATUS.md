@@ -2,11 +2,14 @@
 
 Compact status note. Read this first at the start of every session.
 
-Last updated: 2026-11-06
+Last updated: 2026-11-07
 
 ## Status
 
-- **Current increment:** Increment 7b - the web app's proposal and result screens (D-030
+- **Current increment:** Increment 7c - the audit record and the list of attempts (D-031
+  Accepted; guidelines version 1.3, section 13). Implemented and verified on branch
+  feat/frontend (not committed); the developer's sandbox check passed; awaiting comprehension
+  confirmation and commit authorization. Before it: Increment 7b - the web app's proposal and result screens (D-030
   Accepted; brand guidelines version 1.1, section 12). Implemented and verified on branch
   feat/frontend (not committed). The developer's sandbox walkthrough is done
   (docs/evidence/frontend/PROPOSAL_RESULT_WALKTHROUGH.md, Part 2); awaiting the comprehension
@@ -157,7 +160,7 @@ Last updated: 2026-11-06
   docs/evidence/ai-drafting/AGENT_SMOKE_RESULTS.md.
 - **Next approved task:** None. Increment 7c (the audit view) and Increment 8 (demo
   hardening) each need their own proposal and approval.
-- **Next comprehension gate:** Increment 7b walkthrough.
+- **Next comprehension gate:** Increment 7c comprehension questions.
 
 ## Evidence gates
 
@@ -203,7 +206,7 @@ Each increment needs separate approval.
 | 6b | A labelled AI shopping agent that proposes carts, checked by the same deterministic gate (D-025) | Implemented; the developer's `agent-smoke` run against the real model passed; awaiting commit |
 | 7a | Next.js app: the /api rewrite (D-027) and the mandate screen (D-026 to D-029) | Complete (1230b97, f1bf31a); the developer's walkthrough is done and D-029 is Accepted; on feat/frontend, not pushed |
 | 7b | Frontend: proposal and result screens (D-030; guidelines section 12) | Implemented and verified (a browser run against the real API, then the developer's sandbox walkthrough); D-030 Accepted; uncommitted on feat/frontend; awaiting commit authorization |
-| 7c | Frontend: the audit timeline and the list of attempts | Not started; needs its own proposal |
+| 7c | Frontend: the audit record and the list of attempts (D-031; guidelines section 13) | Implemented and verified by tests, a browser run on placeholder values and the developer's sandbox check (capture, void and list all passed, as reported by the developer); uncommitted |
 | 8 | Demo hardening and publication review | Not started |
 
 ## Earlier generated code
