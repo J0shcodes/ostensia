@@ -4,15 +4,17 @@ import type { IconName } from "./icons.tsx";
 import styles from "./provenance.module.css";
 
 // Every piece of content that comes from a specific source says so (guidelines section
-// 7). Increment 7a has four sources. The PayPal Sandbox treatment is added with the
-// first screen that calls PayPal, so that no badge ever appears without a PayPal call.
-export type Source = "ai" | "ostensia" | "person" | "simulated";
+// 7). The "paypal" source is for a real PayPal Sandbox operation and is used only on a
+// step that made a PayPal call, so that no badge ever appears without one. Increment 7b
+// is the first screen that can use it.
+export type Source = "ai" | "ostensia" | "person" | "simulated" | "paypal";
 
 const BADGE_TEXT: Record<Source, string> = {
   ai: "AI-generated draft",
   ostensia: "Checked by Ostensia",
   person: "Confirmed by you",
   simulated: "Simulated shop",
+  paypal: "PayPal Sandbox",
 };
 
 const BADGE_ICON: Record<Source, IconName> = {
@@ -20,6 +22,7 @@ const BADGE_ICON: Record<Source, IconName> = {
   ostensia: "check",
   person: "check",
   simulated: "info",
+  paypal: "info",
 };
 
 const BADGE_CLASS: Record<Source, string> = {
@@ -27,6 +30,7 @@ const BADGE_CLASS: Record<Source, string> = {
   ostensia: "badgeOstensia",
   person: "badgePerson",
   simulated: "badgeSimulated",
+  paypal: "badgePaypal",
 };
 
 export function ProvenanceBadge({ source, label }: { readonly source: Source; readonly label?: string }) {

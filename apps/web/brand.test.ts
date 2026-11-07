@@ -2,15 +2,33 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { ATTEMPT_STATUSES } from "./lib/api-types.ts";
+import { STATUS_PRESENTATION } from "./lib/attempt-status.ts";
 import {
+  AGENT_MODE_INFORMED,
+  AGENT_MODE_UNINFORMED,
+  AGENT_NOTE,
+  AGENT_OFF_NOTICE,
   AI_DRAFT_NOTE,
   AI_OFF_NOTICE,
   API_AVAILABLE,
   API_UNREACHABLE,
+  ATTEMPT_MISSING,
+  ATTEMPT_UNCERTAIN,
+  AUTHORIZE_HELP,
+  BUSY,
   DISCLOSURE,
+  LABELS,
+  NOT_SENT_TO_PAYPAL,
   PAGE_INTRO,
+  PROPOSAL_INTRO,
+  PROPOSAL_TITLE,
   REFERENCE_NOTE,
+  REVOKE_WARNING,
+  SETTLE_HELP,
+  SOURCE_NOT_RECORDED,
 } from "./lib/messages.ts";
+import { RECONCILE_TEXT } from "./lib/attempt-status.ts";
 
 // The brand guidelines are the canonical specification (CLAUDE.md section 14). These
 // tests read that document and compare it with the code, so a colour, a font weight, a
@@ -177,6 +195,10 @@ describe("contrast (WCAG 2.2 AA)", () => {
     ["warning-700", "surface-0"],
     ["hold-700", "hold-50"],
     ["hold-700", "surface-0"],
+    // Section 12: status lines on their tints, and secondary text inside tinted panels.
+    ["ink-900", "hold-50"],
+    ["ink-700", "ai-50"],
+    ["ink-700", "brand-50"],
   ];
 
   // Borders and indicators that identify a control or a state. 3:1.
@@ -228,5 +250,115 @@ describe("approved interface language (guidelines section 10)", () => {
 
   it("says the AI never approves a purchase", () => {
     expect(AI_DRAFT_NOTE).toContain("AI never approves a purchase.");
+  });
+});
+
+describe("proposal and result screens (guidelines section 12)", () => {
+  const flat = (text: string): string => text.replace(/\s+/g, " ");
+  const document = flat(GUIDELINES);
+  const section12 = document.slice(document.indexOf("## 12. Proposal and result screens"));
+
+  it("is part of the approved specification", () => {
+    expect(GUIDELINES).toContain("Version: 1.1");
+    expect(document).toContain("were approved by the developer on 2026-11-06");
+    expect(GUIDELINES).not.toContain("PROPOSED");
+    expect(section12.length).toBeGreaterThan(1000);
+  });
+
+  it.each([
+    ["the proposal title", PROPOSAL_TITLE],
+    ["the proposal introduction", PROPOSAL_INTRO],
+    ["the agent note", AGENT_NOTE],
+    ["the agent-off notice", AGENT_OFF_NOTICE],
+    ["the informed mode", AGENT_MODE_INFORMED],
+    ["the uninformed mode", AGENT_MODE_UNINFORMED],
+    ["the authorize help", AUTHORIZE_HELP],
+    ["the settle help", SETTLE_HELP],
+    ["the nothing-sent line", NOT_SENT_TO_PAYPAL],
+    ["the source-not-recorded line", SOURCE_NOT_RECORDED],
+    ["the unclear-answer notice", ATTEMPT_UNCERTAIN],
+    ["the missing-attempt line", ATTEMPT_MISSING],
+    ["the revoke confirmation", REVOKE_WARNING],
+    ["the captured-record line", RECONCILE_TEXT.captured],
+    ["the voided-record line", RECONCILE_TEXT.voided],
+    ["the conflict line", RECONCILE_TEXT.conflict],
+    ["the unchanged line", RECONCILE_TEXT.unchanged],
+  ])("%s matches the guidelines word for word", (_name, text) => {
+    expect(section12).toContain(flat(text));
+  });
+
+  it("uses every approved button label and running label", () => {
+    for (const label of Object.values(LABELS)) expect(section12, label).toContain(`"${label}"`);
+    for (const label of Object.values(BUSY)) expect(section12, label).toContain(`"${label}"`);
+  });
+
+  // The status table in 12.5, row by row: | status | label | tone | line |
+  const ROW = /^\|\s*([a-z_, ]+?)\s*\|\s*([^|]+?)\s*\|\s*(danger|warning|hold|success|neutral|progress)\s*\|\s*(.+?)\s*\|$/;
+  const rows = GUIDELINES.split("\n").flatMap((line) => {
+    const match = ROW.exec(line);
+    return match === null ? [] : [{ statuses: (match[1] ?? "").split(",").map((part) => part.trim()), label: match[2] ?? "", tone: match[3] ?? "", line: match[4] ?? "" }];
+  });
+
+  it("reads the status table", () => {
+    expect(rows.length).toBe(16);
+  });
+
+  it("describes every attempt status exactly once", () => {
+    expect(rows.flatMap((row) => row.statuses).sort()).toEqual([...ATTEMPT_STATUSES].sort());
+  });
+
+  it.each(ATTEMPT_STATUSES.map((status) => [status]))("%s has the label, tone and line the guidelines give", (status) => {
+    const row = rows.find((candidate) => candidate.statuses.includes(status));
+    expect(row, status).toBeDefined();
+    const shown = STATUS_PRESENTATION[status];
+    expect(shown.label).toBe(row?.label);
+    expect(shown.tone).toBe(row?.tone);
+    expect(flat(shown.line)).toBe(flat(row?.line ?? ""));
+  });
+
+  it("has a colour token for every tone it uses", () => {
+    const tokens = cssColours();
+    for (const tone of ["danger", "warning", "hold", "success"]) {
+      expect(tokens.has(`${tone}-700`), tone).toBe(true);
+      expect(tokens.has(`${tone}-50`), tone).toBe(true);
+    }
+    expect(tokens.has("paypal-op-600")).toBe(true);
+  });
+
+  it("never claims what section 10 prohibits", () => {
+    const shown = Object.values(STATUS_PRESENTATION)
+      .map((entry) => `${entry.label} ${entry.line}`)
+      .join(" ")
+      .toLowerCase();
+    expect(shown).not.toMatch(/ai approved|ai paid|paypal enforce|production-ready|real money|released immediately/);
+  });
+});
+
+describe("section 12 styles that only appear after a PayPal call or an irreversible action", () => {
+  // A real PayPal Sandbox operation needs the developer's credentials, so these cannot be
+  // seen in an automated browser run. They are checked here against the guidelines instead.
+  const css = (name: string): string => readFileSync(join(WEB, "components", name), "utf8");
+  const flat = (text: string): string => text.replace(/\s+/g, " ");
+
+  it("draws the PayPal Sandbox treatment as a 3px solid left rule in paypal-op-600 (section 7)", () => {
+    expect(flat(GUIDELINES)).toContain("3px solid paypal-op-600 left rule");
+    expect(css("provenance.module.css")).toMatch(/\.paypal\s*\{[^}]*border-left:\s*3px solid var\(--paypal-op-600\);[^}]*\}/);
+    expect(css("provenance.module.css")).toMatch(/\.badgePaypal\s*\{[^}]*color:\s*var\(--paypal-op-600\);/);
+  });
+
+  it("draws the destructive button white, with danger-700 on the border and text, and danger-50 on hover (12.7)", () => {
+    const controls = css("controls.module.css");
+    expect(controls).toMatch(/\.destructive\s*\{[^}]*background:\s*var\(--surface-0\);[^}]*border-color:\s*var\(--danger-700\);[^}]*color:\s*var\(--danger-700\);/);
+    expect(controls).toMatch(/\.destructive:hover:not\(:disabled\)\s*\{[^}]*background:\s*var\(--danger-50\);/);
+  });
+
+  it("draws the neutral status indicator in ink-700 on white, with no tint (12.7)", () => {
+    const status = css("status-indicator.module.css");
+    expect(status).toMatch(/\.indicator\s*\{[^}]*background:\s*var\(--surface-0\);/);
+    expect(status).toMatch(/\.label\s*\{[^}]*color:\s*var\(--ink-700\);/);
+  });
+
+  it("stacks the cart below 640px so nothing scrolls sideways (12.7)", () => {
+    expect(css("cart-view.module.css")).toMatch(/@media \(max-width: 639px\)\s*\{\s*\.line\s*\{\s*grid-template-columns:\s*minmax\(0, 1fr\);/);
   });
 });

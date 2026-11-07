@@ -1,5 +1,5 @@
 import type { ApiResult } from "./api.ts";
-import type { DraftResponse } from "./api-types.ts";
+import type { DraftResponse, Scenario } from "./api-types.ts";
 
 // Words the interface says. The strings marked "approved" are the ones in
 // docs/design/OSTENSIA_BRAND_GUIDELINES.md (sections 5, 8 and 10), and a test checks
@@ -130,3 +130,160 @@ export function describeMissingField(path: string): string {
 // When a confirmation did not come back clearly, the mandate may or may not exist.
 export const CONFIRM_UNCERTAIN =
   "Ostensia could not confirm whether the mandate was created. It is not known to have failed.";
+
+// ----- Increment 7b ----------------------------------------------------------------------
+// Approved: guidelines section 12 (a test compares each with the document).
+export const PROPOSAL_TITLE = "Propose a purchase";
+export const PROPOSAL_INTRO =
+  "Choose a cart for an AI shopping agent to propose, or build one from the simulated shop. Ostensia checks it against your mandate before anything is authorised.";
+export const AGENT_NOTE = "The AI proposes a cart. It never approves a purchase.";
+export const AGENT_OFF_NOTICE =
+  "The AI agent is off because no Anthropic key is configured. You can use the simulated shop instead.";
+export const AGENT_MODE_INFORMED = "Show the agent the mandate's limits";
+export const AGENT_MODE_UNINFORMED = "Do not show the agent the limits";
+export const AUTHORIZE_HELP =
+  "Ostensia checks the cart. If it passes, PayPal Sandbox puts the funds on hold. Nothing is captured until you settle.";
+export const SETTLE_HELP = "The same check, then Ostensia captures or voids straight away.";
+export const NOT_SENT_TO_PAYPAL = "Nothing was sent to PayPal.";
+export const SOURCE_NOT_RECORDED = "Ostensia's audit log does not record where a cart came from.";
+export const ATTEMPT_UNCERTAIN =
+  "Ostensia could not confirm what happened. The request may have reached PayPal Sandbox. Nothing will be sent again unless you choose.";
+export const ATTEMPT_MISSING = "No attempt with this id exists. Nothing was sent.";
+// Not in the guidelines: used when an order was never sent (no token, or nothing payable),
+// so the payment panel carries no PayPal Sandbox treatment.
+export const NO_ORDER_SENT = "No order was sent to PayPal Sandbox.";
+export const REVOKE_WARNING =
+  "Revoke this mandate? This cannot be undone. Any further purchase will be blocked. A payment already on hold is voided only when you settle it.";
+
+export const LABELS = {
+  continueToProposal: "Continue to proposal",
+  buildSimulated: "Build simulated cart",
+  askAgent: "Ask the AI agent for a cart",
+  authorize: "Check cart and authorize",
+  settleNow: "Check cart and settle",
+  settle: "Settle this authorization",
+  revoke: "Revoke mandate",
+  keep: "Keep mandate",
+  reconcile: "Check PayPal's record",
+  checkStatus: "Check status",
+  tryAgain: "Try again",
+} as const;
+
+export const BUSY = {
+  building: "Building…",
+  asking: "Asking…",
+  checking: "Checking…",
+  settling: "Settling…",
+  revoking: "Revoking…",
+  checkingStatus: "Checking status…",
+} as const;
+
+// One line for each scenario, in the order the API lists them (guidelines section 12.2).
+export const SCENARIO_TEXT: Readonly<Record<Scenario, { readonly name: string; readonly line: string }>> = {
+  compliant: { name: "Compliant", line: "One unit of the first product on the mandate that fits its limits." },
+  over_unit_price: { name: "Over unit price", line: "A product priced above the mandate's unit-price limit." },
+  over_quantity: { name: "Over quantity", line: "More units than the mandate allows." },
+  wrong_variant: { name: "Wrong variant", line: "A variant the mandate does not allow." },
+  unlisted_product: { name: "Unlisted product", line: "A product that is not on the mandate." },
+  over_total: { name: "Over total", line: "Every line within its limits, but the total above the mandate's limit." },
+};
+
+// A message for a proposal that did not arrive. Building a cart only reads and returns
+// text, so "nothing was sent to PayPal" is always true here.
+export type ProposalFailure = { readonly tone: "off" | "neutral" | "error"; readonly text: string };
+
+const PROPOSAL_NOTHING_SENT = "Nothing was sent to PayPal.";
+
+function describeProposalCommon(result: NotOk<unknown>): ProposalFailure | null {
+  if (result.kind === "unreachable") {
+    return {
+      tone: "error",
+      text: `${describeUnreachable(result.reason)} ${PROPOSAL_NOTHING_SENT} Check that the API is running, then try again.`,
+    };
+  }
+  if (result.kind === "unexpected") {
+    return { tone: "error", text: `The Ostensia API sent a response this page does not understand. ${PROPOSAL_NOTHING_SENT}` };
+  }
+  if (result.error === "mandate_not_found") return { tone: "error", text: "Ostensia does not know this mandate (mandate_not_found)." };
+  if (result.error === "invalid_request") return { tone: "error", text: "Ostensia could not read the request (invalid_request)." };
+  return null;
+}
+
+export function describeSimulatedFailure(result: NotOk<unknown>): ProposalFailure {
+  const common = describeProposalCommon(result);
+  if (common !== null) return common;
+  if (result.kind === "api_error" && result.error === "scenario_not_buildable") {
+    const reason = result.body["reason"];
+    return {
+      tone: "neutral",
+      text: typeof reason === "string" && reason !== "" ? reason : "This scenario cannot be built from this mandate.",
+    };
+  }
+  return { tone: "error", text: `Ostensia returned an error${codeNote(result.kind === "api_error" ? result.error : undefined)}. ${PROPOSAL_NOTHING_SENT}` };
+}
+
+export function describeAgentFailure(result: NotOk<unknown>): ProposalFailure {
+  const common = describeProposalCommon(result);
+  if (common !== null) return common;
+  if (result.kind !== "api_error") return { tone: "error", text: "The AI agent did not answer." };
+  const reason = result.body["reason"];
+  switch (result.error) {
+    case "agent_unavailable":
+      switch (reason) {
+        case "not_configured":
+          return { tone: "off", text: AGENT_OFF_NOTICE };
+        case "auth":
+          return { tone: "error", text: "The AI service rejected the key set for the Ostensia API (auth), so the agent is unavailable. You can use the simulated shop instead." };
+        case "rate_limited":
+          return { tone: "error", text: "The AI service is limiting requests right now (rate_limited). Wait a little, then try again." };
+        case "timeout":
+          return { tone: "error", text: "The AI service took too long to answer (timeout). Try again, or use the simulated shop." };
+        case "connection":
+          return { tone: "error", text: "Ostensia could not reach the AI service (connection). Try again, or use the simulated shop." };
+        default:
+          return { tone: "error", text: `The AI service is unavailable${codeNote(reason)}. Try again, or use the simulated shop.` };
+      }
+    case "agent_refused":
+      return { tone: "error", text: "The AI declined to propose a cart (agent_refused). Try a different task, or use the simulated shop." };
+    case "agent_invalid":
+      return { tone: "error", text: "The AI's cart could not be used (agent_invalid). Try again, or use the simulated shop." };
+    default:
+      return { tone: "error", text: `Ostensia returned an error${codeNote(result.error)}. ${PROPOSAL_NOTHING_SENT}` };
+  }
+}
+
+// The API refusing a request about an attempt (a 4xx or the stopped gate). A refusal
+// means the request did nothing.
+export function describeAttemptRefusal(error: string): string {
+  switch (error) {
+    case "invalid_attempt_id":
+      return "Ostensia did not accept the attempt id (invalid_attempt_id). Nothing was sent.";
+    case "invalid_proposal":
+      return "Ostensia did not accept this cart (invalid_proposal). Nothing was sent.";
+    case "invalid_mandate":
+      return "Ostensia did not accept this mandate (invalid_mandate). Nothing was sent.";
+    case "mandate_not_found":
+      return "Ostensia does not know this mandate (mandate_not_found). Nothing was sent.";
+    case "attempt_not_found":
+      return "Ostensia does not know this attempt (attempt_not_found).";
+    case "attempt_id_reused":
+      return "This attempt id was already used for a different cart (attempt_id_reused). Nothing was sent.";
+    case "mandate_in_use":
+      return "This mandate is already in use by another attempt (mandate_in_use). Nothing was sent.";
+    case "invalid_request":
+      return "Ostensia could not read the request (invalid_request). Nothing was sent.";
+    case "gate_faulted":
+      return "The Ostensia gate has stopped itself after an internal error and refuses new work (gate_faulted). Restart the API. Nothing was sent.";
+    default:
+      return `Ostensia returned an error${codeNote(error)}.`;
+  }
+}
+
+// What was behind a request about an attempt that did not come back clearly.
+export function describeAttemptDetail(
+  result: NotOk<unknown>,
+): string {
+  if (result.kind === "unreachable") return describeUnreachable(result.reason);
+  if (result.kind === "unexpected") return "The Ostensia API sent a response this page does not understand.";
+  return describeApiError(result.error);
+}

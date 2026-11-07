@@ -5,9 +5,9 @@ import { useEffect, useRef, useState } from "react";
 import type { CatalogueProduct } from "../lib/api-types.ts";
 import { formatLocalInstant } from "../lib/datetime.ts";
 import { describeTerms } from "../lib/mandate-form.ts";
-import { REFERENCE_NOTE } from "../lib/messages.ts";
+import { LABELS, REFERENCE_NOTE } from "../lib/messages.ts";
 import { Callout } from "./callout.tsx";
-import { Button } from "./controls.tsx";
+import { Button, ButtonLink } from "./controls.tsx";
 import { Icon } from "./icons.tsx";
 import { Panel } from "./provenance.tsx";
 import styles from "./confirmed-card.module.css";
@@ -103,8 +103,8 @@ export function ConfirmedCard({ mandate, existing, products, onAnother }: Props)
             </ul>
           </div>
 
-          <p className={styles["note"]}>Next: propose a cart. This step is not available yet.</p>
           <div className={styles["actions"]}>
+            <ButtonLink href={`/mandates/${encodeURIComponent(mandate.id)}`}>{LABELS.continueToProposal}</ButtonLink>
             <Button variant="secondary" onClick={onAnother}>
               Create another mandate
             </Button>

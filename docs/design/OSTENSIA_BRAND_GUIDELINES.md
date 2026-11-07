@@ -1,7 +1,9 @@
 # Ostensia Brand Guidelines
 
-Status: Approved (2026-11-06, by the developer)
-Version: 1.0
+Status: Approved (2026-11-06, by the developer). Section 12 (proposal and result screens,
+Increment 7b) and its four proposed conventions (12.7) were approved by the developer on
+2026-11-06.
+Version: 1.1
 Scope: the visual identity and interface language of the Ostensia frontend (apps/web).
 Decision record: D-028 (docs/DECISIONS.md)
 Required reading: CLAUDE.md section 14 requires reading this document before making or
@@ -299,3 +301,157 @@ Constraints:
 - Fonts only through next/font as in section 4.
 - Any new token, colour pairing or component convention needs the developer's
   approval and an update to this document first.
+
+## 12. Proposal and result screens (Increment 7b)
+
+Scope: steps 2 and 3 of the step indicator. The audit timeline and the list of all
+attempts are a later increment (7c) and are not specified here. Sections 1 to 11 still
+apply; this section adds screens and states, and the few new conventions listed
+at the end for approval. No new colour, font, icon or spacing value is introduced.
+
+### 12.1 Pages and navigation
+- `/` is the mandate screen. The "Mandate confirmed" card gains a primary button
+  "Continue to proposal" that opens `/mandates/{id}`.
+- `/mandates/{id}` is step 2, Proposal. `/attempts/{id}` is step 3, Result.
+- The step indicator follows the page. A step the person has already reached is a link;
+  later steps stay non-interactive. Step 1 links to `/`.
+- Every page keeps the header, the disclosure bar and the layout of section 5. A page for
+  an id the API does not know shows a plain "not found" message and a link back to `/`.
+
+### 12.2 Step 2: Proposal
+Order, top to bottom:
+1. Title "Propose a purchase" and the line: "Choose a cart for an AI shopping agent to
+   propose, or build one from the simulated shop. Ostensia checks it against your mandate
+   before anything is authorised."
+2. **Mandate summary** (solid brand panel, badge "Confirmed by you"): the plain-words
+   summary of section 8, the id and the status. A revoked mandate shows the status
+   "Revoked" in a warning callout and disables both sources below, with the reason beside
+   the buttons.
+3. **Simulated shop** (dotted sim panel, badge "Simulated shop"): a radio group of the
+   six scenarios, each with a one-line description: compliant, over unit price, over
+   quantity, wrong variant, unlisted product, over total. Secondary button
+   "Build simulated cart". A scenario the API cannot build from this mandate shows the
+   API's reason beside the group and is not an error state.
+4. **AI shopping agent** (dashed AI panel, badge "AI-generated proposal"): radio choice
+   "Show the agent the mandate's limits" / "Do not show the agent the limits", an optional
+   task text area (2,000 characters, with a counter), the line "The AI proposes a cart. It
+   never approves a purchase.", and the secondary button "Ask the AI agent for a cart". The
+   API's note on the mode is shown after the answer. A decline is shown as a result with
+   the agent's reason, not as an error. With no key: a neutral notice "The AI agent is off
+   because no Anthropic key is configured. You can use the simulated shop instead." and the
+   button is disabled with that reason.
+5. **The cart** (appears after a cart is built; it keeps the panel treatment of its
+   source, so a simulated cart is dotted and an AI cart is dashed):
+   - one row per line: product name and variant, quantity times unit price, line total;
+   - below 640px each row stacks (name, then quantity and price, then the line total); the
+     page never scrolls horizontally;
+   - a total row "Total $12.34 USD". Money uses tabular figures and the "$12.34 USD" form;
+   - no Ostensia verdict is shown here, because the gate has not run.
+   Building another cart replaces this one.
+6. **Actions** under the cart:
+   - Primary "Check cart and authorize": Ostensia checks the cart; if it passes, PayPal
+     Sandbox holds the funds. Nothing is captured until the person settles. Help text:
+     "Ostensia checks the cart. If it passes, PayPal Sandbox puts the funds on hold. Nothing
+     is captured until you settle."
+   - Secondary "Check cart and settle": the same check, then settles at once. Help text:
+     "The same check, then Ostensia captures or voids straight away."
+   - Both are disabled while a request is running (label "Checking…").
+
+### 12.3 Step 3: Result
+Three panels, never merged (section 7). Order:
+1. **Decision** (solid brand panel, badge "Checked by Ostensia"): a status indicator
+   (12.5) and, in plain words from the API, why the cart was allowed or blocked, once for
+   the pre-check and, if it ran, once for the final check after settling. Each violation is
+   one sentence in a list. Wording is the API's explanation and is not rewritten.
+2. **Payment** (white panel with a 3px paypal-op-600 left rule, badge "PayPal Sandbox"):
+   shown **only if a PayPal call was made**; for a pre-check block it is replaced by one
+   line, "Nothing was sent to PayPal." Contains the order id, authorization id and capture
+   id where they exist, in mono, shortened with a Copy control, and the status wording of
+   section 10.
+3. **Next steps**: the actions that status allows (12.5), or one line saying nothing more
+   can be done here.
+
+Beneath the panels, the cart as in 12.2 with the caption "As proposed" and, only if this
+browser session saw the cart's source, its source label with the caption "as labelled when
+proposed". After a page reload the source is not shown, and the page says: "Ostensia's
+audit log does not record where a cart came from." (TD-027).
+
+### 12.4 When a reply does not come back
+The page keeps the attempt id it generated before sending. If the reply is lost, cut off
+by the proxy, or the API is unreachable, it shows a warning callout: "Ostensia could not
+confirm what happened. The request may have reached PayPal Sandbox. Nothing will be sent
+again unless you choose." with two buttons:
+- "Check status" reads the attempt (a read only). A found attempt is shown; a missing one
+  (404) is reported as "No attempt with this id exists. Nothing was sent."
+- "Try again" is offered only after a 404, and sends the identical request with the same
+  attempt id.
+Nothing is retried automatically. A refusal "mandate_in_use" names the attempt that holds
+the mandate and links to it.
+
+### 12.5 Attempt statuses
+Each status has an icon from the existing set, a short label (14/600), one line of
+explanation (14/400) and the tone's tokens. Tones: danger = blocked or failed; warning =
+needs attention or outcome unknown; hold = funds on hold; success = captured; neutral =
+ink-700 on white with the info icon; progress = clock icon, neutral. Colour is never the
+only signal.
+
+| Status | Label | Tone | Line |
+|---|---|---|---|
+| blocked_precheck | Blocked by Ostensia | danger | The cart breaks the mandate's terms. Nothing was sent to PayPal. |
+| integrity_failed | Blocked: mandate changed | danger | The stored mandate no longer matches its reference. Nothing was sent to PayPal. |
+| abandoned | Stopped before PayPal | warning | The API restarted before this reached PayPal. Nothing was sent. |
+| create_rejected | Order not created | danger | PayPal Sandbox did not create the order, or it could not be sent. Nothing is on hold. |
+| create_unknown | Order outcome unknown | warning | Ostensia did not get PayPal's answer. The order may exist. Nothing will be sent again. |
+| anomaly | Needs a person | warning | PayPal Sandbox created an order but did not return exactly one authorization. Nothing was captured. |
+| authorized | Funds on hold | hold | PayPal authorized the payment: the buyer's funds are on hold; no money has moved. |
+| captured | Captured | success | Payment captured in PayPal Sandbox. |
+| capture_pending | Capture pending | hold | PayPal Sandbox accepted the capture but has not completed it. |
+| voided | Voided | neutral | Authorization voided in PayPal Sandbox; nothing was captured. When the hold leaves the buyer's balance is up to PayPal. |
+| write_refused | Already settled | warning | PayPal Sandbox reports this authorization as already settled. |
+| write_rejected | PayPal rejected the request | danger | Nothing was captured or voided. |
+| write_unknown | Outcome unknown | warning | Ostensia did not get PayPal's answer and will not send it again. Check PayPal's record. |
+| no_action | Nothing sent | neutral | The authorization was no longer open when Ostensia checked it, so nothing was sent. |
+| conflict | Needs a person | danger | PayPal's record does not match what Ostensia asked for. |
+| started, prechecked, creating, writing | In progress | progress | Ostensia is working on this. |
+
+Actions by status:
+- authorized: "Settle this authorization" (primary), "Revoke mandate" (destructive).
+- write_unknown, capture_pending, write_refused: "Check PayPal's record" (secondary; it
+  only reads). Its outcome is reported as: captured ("PayPal's record shows the payment was
+  captured."), voided ("PayPal's record shows the authorization was voided."), conflict
+  ("PayPal's record does not match what Ostensia asked for. A person needs to look at it."),
+  unchanged ("PayPal's record does not settle it yet. Check again later.").
+- create_unknown, anomaly, write_rejected, conflict: no action; the page says so (the API
+  offers no way forward for these, TD-034).
+- Every other status: no action.
+"Revoke mandate" shows a confirmation first: "Revoke this mandate? This cannot be undone.
+Any further purchase will be blocked. A payment already on hold is voided only when you
+settle it." with "Revoke mandate" and "Keep mandate". After it, the page reads the attempt
+again.
+
+### 12.6 Accessibility and responsive
+- After a request completes, focus moves to the result heading; status changes use
+  aria-live="polite" as in section 9.
+- Radio groups use fieldset and legend; the cart is a list, not a div grid; every Copy
+  control has a name that says what it copies.
+- Breakpoints as in section 9. Below 640px the source panels stack and every button is
+  full width. Touch targets are at least 40px.
+
+### 12.7 New conventions (approved 2026-11-06)
+1. The destructive button (section 6 already defines it, "later increments") is used for
+   "Revoke mandate", with hover as danger-50 background (danger-700 on danger-50 is within
+   the verified pairings).
+2. Neutral status indicator: ink-700 on white with the info icon, used for "Voided" and
+   "Nothing sent". There is no neutral status token, so none is added.
+3. The inline revoke confirmation in 12.5.
+4. The cart list in 12.2, including its stacked layout below 640px.
+
+### 12.8 New approved strings
+Titles and lines in 12.2 to 12.5, the button labels "Continue to proposal", "Build
+simulated cart", "Ask the AI agent for a cart", "Check cart and authorize", "Check cart and
+settle", "Settle this authorization", "Revoke mandate", "Keep mandate", "Check PayPal's
+record", "Check status", "Try again", and their running labels ("Building…", "Asking…",
+"Checking…", "Settling…", "Revoking…", "Checking status…"). The strings in section 10
+are unchanged. Prohibited claims in section 10 apply to every new string; in particular the
+interface never says that the AI approved or paid, and never says that PayPal enforced the
+mandate.

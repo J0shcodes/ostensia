@@ -63,6 +63,11 @@
   border: 1px dotted var(--sim-600);
 }
 
+/* PayPal Sandbox: a real operation. A 3px solid left rule; the rest stays a plain card. */
+.paypal {
+  border-left: 3px solid var(--paypal-op-600);
+}
+
 .badge {
   display: inline-flex;
   align-items: center;
@@ -90,4 +95,8 @@
 .badgeSimulated {
   color: var(--sim-600);
   border-style: dotted;
+}
+
+.badgePaypal {
+  color: var(--paypal-op-600);
 }

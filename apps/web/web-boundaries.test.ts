@@ -177,8 +177,47 @@ describe("safe rendering and honest interface (CLAUDE.md sections 7 and 8)", () 
     }
   });
 
-  it("does not mention PayPal: confirming a mandate makes no PayPal call", () => {
-    for (const path of CLIENT) expect(code(path), rel(path)).not.toMatch(/paypal/i);
+  // Increment 7a said nothing about PayPal anywhere, because creating a mandate makes no
+  // PayPal call. From 7b the word appears, but only in the files that show or explain a
+  // PayPal operation. The mandate-creation files must still never mention it.
+  const MAY_MENTION_PAYPAL = new Set([
+    "components/decision-panel.tsx",
+    "components/next-steps.tsx",
+    "components/payment-panel.tsx",
+    "components/proposal-screen.tsx",
+    "components/provenance.tsx",
+    "components/result-screen.tsx",
+    "components/uncertain-notice.tsx",
+    "lib/attempt-status.ts",
+    "lib/messages.ts",
+  ]);
+  const MANDATE_STEP = [
+    "app/page.tsx",
+    "components/confirm-outcome.tsx",
+    "components/confirmed-card.tsx",
+    "components/draft-panel.tsx",
+    "components/item-editor.tsx",
+    "components/mandate-form.tsx",
+    "components/mandate-screen.tsx",
+    "lib/datetime.ts",
+    "lib/mandate-form.ts",
+    "lib/mandate-match.ts",
+    "lib/money.ts",
+  ];
+
+  it("mentions PayPal only where a PayPal operation is shown or explained", () => {
+    const mentioning = CLIENT.filter((path) => /paypal/i.test(code(path))).map(rel);
+    expect(mentioning.filter((path) => !MAY_MENTION_PAYPAL.has(path))).toEqual([]);
+    // If the scan stops finding the files it was written for, it is not checking.
+    expect(mentioning.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it("never mentions PayPal in the mandate-creation files: confirming a mandate makes no PayPal call", () => {
+    for (const name of MANDATE_STEP) {
+      const path = join(WEB, name);
+      expect(existsSync(path), name).toBe(true);
+      expect(code(path), name).not.toMatch(/paypal/i);
+    }
   });
 
   it("stores nothing in the browser", () => {

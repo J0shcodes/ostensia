@@ -1,4 +1,4 @@
-import type { MandateDraft, MandateTerms } from "@ostensia/domain";
+import type { MandateDraft, MandateTerms, PurchaseProposal } from "@ostensia/domain";
 
 // The shapes of the API responses this page reads, copied from the routes that send
 // them. The domain's own types and schemas are used wherever the domain defines the
@@ -39,3 +39,119 @@ export type DraftResponse = {
   readonly completeness: DraftCompleteness;
   readonly warnings: readonly string[];
 };
+
+// ---------------------------------------------------------------------------------------
+// Increment 7b: proposals and purchase attempts.
+//
+// The three lists below are copied from the API (they live in apps/api and cannot be
+// imported). api-drift.test.ts reads the API's source and fails if a list changes there
+// and not here, so a copy cannot drift without a test noticing.
+// ---------------------------------------------------------------------------------------
+
+// apps/api/src/simulation/scenarios.ts
+export const SCENARIOS = [
+  "compliant",
+  "over_unit_price",
+  "over_quantity",
+  "wrong_variant",
+  "unlisted_product",
+  "over_total",
+] as const;
+export type Scenario = (typeof SCENARIOS)[number];
+
+// apps/api/src/ai/shopper-prompt.ts
+export const SHOP_MODES = ["informed", "uninformed"] as const;
+export type ShopMode = (typeof SHOP_MODES)[number];
+
+// apps/api/src/gate/state.ts (AttemptStatus). Every status the gate can put an attempt in.
+export const ATTEMPT_STATUSES = [
+  "started",
+  "prechecked",
+  "blocked_precheck",
+  "integrity_failed",
+  "abandoned",
+  "creating",
+  "create_rejected",
+  "create_unknown",
+  "anomaly",
+  "authorized",
+  "writing",
+  "captured",
+  "capture_pending",
+  "voided",
+  "write_refused",
+  "write_rejected",
+  "write_unknown",
+  "no_action",
+  "conflict",
+] as const;
+export type AttemptStatus = (typeof ATTEMPT_STATUSES)[number];
+
+// POST /mandates/:id/simulated-proposal. Everything in it is simulated (D-012).
+export type SimulatedProposalResponse = {
+  readonly label: string;
+  readonly scenario: Scenario;
+  readonly proposal: PurchaseProposal;
+};
+
+// POST /mandates/:id/agent-proposal. The cart is the AI's proposal; nothing here decides
+// whether it is allowed (D-025).
+export type AgentProposalResponse = {
+  readonly label: string;
+  readonly mode: ShopMode;
+  readonly modeNote: string;
+  readonly proposal: PurchaseProposal | null;
+  readonly declinedReason: string | null;
+  readonly rationale: string;
+};
+
+// A decision as the page needs it. The words come from the API (the domain's own
+// explanations), so only the outcome and the total are read here.
+export type DecisionSummary =
+  | { readonly decision: "allow"; readonly computedTotalMinor: number }
+  | { readonly decision: "block" };
+
+// What PayPal reported about an authorization (apps/api/src/gate/events.ts).
+export type AuthorizationFacts = {
+  readonly state: string;
+  readonly statusRaw: string;
+  readonly amountMinor: number | null;
+  readonly currency: string;
+};
+
+// One purchase attempt, as GET /attempts/:id and the settle routes send it.
+export type Attempt = {
+  readonly attemptId: string;
+  readonly mandateId: string;
+  readonly proposal: PurchaseProposal;
+  readonly status: AttemptStatus;
+  readonly precheck: DecisionSummary | null;
+  readonly finalDecision: DecisionSummary | null;
+  readonly orderId: string | null;
+  readonly authorizationId: string | null;
+  readonly authorization: AuthorizationFacts | null;
+  readonly captureId: string | null;
+  readonly startedAt: string;
+  readonly updatedAt: string;
+};
+
+// The audit events of an attempt, reduced to what the page uses to say whether PayPal
+// was called. The full timeline is a later increment.
+export type AttemptEventSummary = {
+  readonly type: string;
+  readonly outcome: string | null;
+  readonly detail: string | null;
+};
+
+export type AttemptEnvelope = {
+  readonly attempt: Attempt;
+  readonly explanation: {
+    readonly precheck: readonly string[] | null;
+    readonly final: readonly string[] | null;
+  };
+  // Only GET /attempts/:id sends events.
+  readonly events: readonly AttemptEventSummary[] | null;
+};
+
+export type ReconcileOutcome = "captured" | "voided" | "conflict" | "unchanged" | "not_applicable";
+export type ReconcileEnvelope = AttemptEnvelope & { readonly outcome: ReconcileOutcome };

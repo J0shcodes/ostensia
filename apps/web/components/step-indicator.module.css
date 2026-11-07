@@ -29,6 +29,12 @@
   color: var(--ink-500);
 }
 
+/* A step already reached is a link, in the brand colour like every link. */
+.link {
+  color: var(--brand-600);
+  font-weight: 500;
+}
+
 .current {
   color: var(--ink-900);
   font-weight: 600;

@@ -1,0 +1,16 @@
+.wrap {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-13);
+}
+
+.note {
+  font-size: var(--text-13);
+  color: var(--ink-700);
+}

@@ -1,6 +1,24 @@
 import { ConfirmedMandateSchema } from "@ostensia/domain";
-import type { ConfirmedMandate, MandateDraft, MandateTerms } from "@ostensia/domain";
-import type { Catalogue, CatalogueProduct, DraftCompleteness, DraftResponse } from "./api-types.ts";
+import type { ConfirmedMandate, MandateDraft, MandateTerms, PurchaseLine, PurchaseProposal } from "@ostensia/domain";
+import { ATTEMPT_STATUSES, SCENARIOS, SHOP_MODES } from "./api-types.ts";
+import type {
+  AgentProposalResponse,
+  Attempt,
+  AttemptEnvelope,
+  AttemptEventSummary,
+  AttemptStatus,
+  AuthorizationFacts,
+  Catalogue,
+  CatalogueProduct,
+  DecisionSummary,
+  DraftCompleteness,
+  DraftResponse,
+  ReconcileEnvelope,
+  ReconcileOutcome,
+  Scenario,
+  ShopMode,
+  SimulatedProposalResponse,
+} from "./api-types.ts";
 
 // The only place this app calls fetch. Every request goes to this app's own origin under
 // /api, and Next.js forwards it to the Ostensia API (D-027). Nothing here knows where
@@ -141,13 +159,189 @@ function parseMandateList(body: unknown): { readonly mandates: ConfirmedMandate[
   return { mandates };
 }
 
+// ----- Increment 7b: proposals and attempts -----------------------------------------------
+// Each parser checks the shape the page relies on and returns null for anything else, so
+// a response that is not what the API documents is reported as "unexpected" and never
+// shown as if it were understood. The words shown to the person (explanations of
+// decisions) come from the API; nothing here judges a purchase.
+
+function isInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value);
+}
+
+function isOneOf<T extends string>(list: readonly T[], value: unknown): value is T {
+  return typeof value === "string" && (list as readonly string[]).includes(value);
+}
+
+function parseLine(value: unknown): PurchaseLine | null {
+  if (!isRecord(value)) return null;
+  if (typeof value["productId"] !== "string" || !isInteger(value["quantity"]) || !isInteger(value["unitPriceMinor"])) return null;
+  const variant = value["variantId"];
+  if (variant !== undefined && typeof variant !== "string") return null;
+  return {
+    productId: value["productId"],
+    quantity: value["quantity"],
+    unitPriceMinor: value["unitPriceMinor"],
+    ...(variant === undefined ? {} : { variantId: variant }),
+  };
+}
+
+function parseProposal(value: unknown): PurchaseProposal | null {
+  if (!isRecord(value) || typeof value["mandateId"] !== "string" || typeof value["currency"] !== "string") return null;
+  if (!isInteger(value["declaredTotalMinor"]) || !Array.isArray(value["lines"])) return null;
+  const lines: PurchaseLine[] = [];
+  for (const entry of value["lines"]) {
+    const line = parseLine(entry);
+    if (line === null) return null;
+    lines.push(line);
+  }
+  return {
+    mandateId: value["mandateId"],
+    currency: value["currency"],
+    declaredTotalMinor: value["declaredTotalMinor"],
+    lines,
+  };
+}
+
+function parseSimulatedProposal(body: unknown): SimulatedProposalResponse | null {
+  if (!isRecord(body) || body["simulated"] !== true || typeof body["label"] !== "string") return null;
+  const scenario = body["scenario"];
+  if (!isOneOf<Scenario>(SCENARIOS, scenario)) return null;
+  const proposal = parseProposal(body["proposal"]);
+  return proposal === null ? null : { label: body["label"], scenario, proposal };
+}
+
+function parseAgentProposal(body: unknown): AgentProposalResponse | null {
+  if (!isRecord(body) || body["aiGenerated"] !== true || typeof body["label"] !== "string") return null;
+  const mode = body["mode"];
+  if (!isOneOf<ShopMode>(SHOP_MODES, mode) || typeof body["modeNote"] !== "string" || typeof body["rationale"] !== "string") return null;
+  const declined = body["declined"];
+  const declinedReason = isRecord(declined) && typeof declined["reason"] === "string" ? declined["reason"] : null;
+  const proposal = body["proposal"] === null ? null : parseProposal(body["proposal"]);
+  if (body["proposal"] !== null && proposal === null) return null;
+  // A cart together with a decline, or neither, is not something the route sends.
+  if ((proposal === null) === (declinedReason === null)) return null;
+  return { label: body["label"], mode, modeNote: body["modeNote"], proposal, declinedReason, rationale: body["rationale"] };
+}
+
+// undefined means "not a decision this page understands"; null means "no decision yet".
+function parseDecision(value: unknown): DecisionSummary | null | undefined {
+  if (value === null) return null;
+  if (!isRecord(value)) return undefined;
+  if (value["decision"] === "allow" && isInteger(value["computedTotalMinor"])) {
+    return { decision: "allow", computedTotalMinor: value["computedTotalMinor"] };
+  }
+  if (value["decision"] === "block") return { decision: "block" };
+  return undefined;
+}
+
+function parseAuthorization(value: unknown): AuthorizationFacts | null | undefined {
+  if (value === null) return null;
+  if (!isRecord(value) || typeof value["state"] !== "string" || typeof value["statusRaw"] !== "string") return undefined;
+  if (typeof value["currency"] !== "string" || !isNullableNumber(value["amountMinor"])) return undefined;
+  return { state: value["state"], statusRaw: value["statusRaw"], amountMinor: value["amountMinor"], currency: value["currency"] };
+}
+
+function parseAttempt(value: unknown): Attempt | null {
+  if (!isRecord(value)) return null;
+  const status = value["status"];
+  if (!isOneOf<AttemptStatus>(ATTEMPT_STATUSES, status)) return null;
+  if (typeof value["attemptId"] !== "string" || typeof value["mandateId"] !== "string") return null;
+  if (typeof value["startedAt"] !== "string" || typeof value["updatedAt"] !== "string") return null;
+  const orderId = value["orderId"];
+  const authorizationId = value["authorizationId"];
+  const captureId = value["captureId"];
+  if (!isNullableString(orderId) || !isNullableString(authorizationId) || !isNullableString(captureId)) return null;
+  const proposal = parseProposal(value["proposal"]);
+  const precheck = parseDecision(value["precheck"]);
+  const finalDecision = parseDecision(value["finalDecision"]);
+  const authorization = parseAuthorization(value["authorization"]);
+  if (proposal === null || precheck === undefined || finalDecision === undefined || authorization === undefined) return null;
+  return {
+    attemptId: value["attemptId"],
+    mandateId: value["mandateId"],
+    proposal,
+    status,
+    precheck,
+    finalDecision,
+    orderId,
+    authorizationId,
+    authorization,
+    captureId,
+    startedAt: value["startedAt"],
+    updatedAt: value["updatedAt"],
+  };
+}
+
+function parseExplanation(value: unknown): readonly string[] | null | undefined {
+  if (value === null) return null;
+  return isStringArray(value) ? value : undefined;
+}
+
+function parseEvents(value: unknown): AttemptEventSummary[] | null | undefined {
+  if (value === undefined) return null;
+  if (!Array.isArray(value)) return undefined;
+  const events: AttemptEventSummary[] = [];
+  for (const entry of value) {
+    if (!isRecord(entry) || typeof entry["type"] !== "string") return undefined;
+    events.push({
+      type: entry["type"],
+      outcome: typeof entry["outcome"] === "string" ? entry["outcome"] : null,
+      detail: typeof entry["detail"] === "string" ? entry["detail"] : null,
+    });
+  }
+  return events;
+}
+
+// Exported because a refused settle can still carry the attempt (a 502 "read_failed": the
+// authorization could not be read, and nothing was written).
+export function parseAttemptEnvelope(body: unknown): AttemptEnvelope | null {
+  if (!isRecord(body)) return null;
+  const attempt = parseAttempt(body["attempt"]);
+  const explanation = body["explanation"];
+  if (attempt === null || !isRecord(explanation)) return null;
+  const precheck = parseExplanation(explanation["precheck"]);
+  const final = parseExplanation(explanation["final"]);
+  const events = parseEvents(body["events"]);
+  if (precheck === undefined || final === undefined || events === undefined) return null;
+  return { attempt, explanation: { precheck, final }, events };
+}
+
+const RECONCILE_OUTCOMES: readonly ReconcileOutcome[] = ["captured", "voided", "conflict", "unchanged", "not_applicable"];
+
+function parseReconcile(body: unknown): ReconcileEnvelope | null {
+  const envelope = parseAttemptEnvelope(body);
+  if (envelope === null || !isRecord(body)) return null;
+  const outcome = body["outcome"];
+  return isOneOf<ReconcileOutcome>(RECONCILE_OUTCOMES, outcome) ? { ...envelope, outcome } : null;
+}
+
+export type AttemptRequest = {
+  readonly attemptId: string;
+  readonly mandateId: string;
+  readonly proposal: PurchaseProposal;
+  // false stops after the authorization; true settles straight away.
+  readonly settleNow: boolean;
+};
+
 export type ApiClient = {
   getHealth(): Promise<ApiResult<{ readonly status: "ok" }>>;
   getCatalogue(): Promise<ApiResult<Catalogue>>;
   draftMandate(instruction: string): Promise<ApiResult<DraftResponse>>;
   createMandate(terms: MandateTerms, intentSummary: string): Promise<ApiResult<{ readonly mandate: ConfirmedMandate }>>;
   listMandates(): Promise<ApiResult<{ readonly mandates: ConfirmedMandate[] }>>;
+  getMandate(mandateId: string): Promise<ApiResult<{ readonly mandate: ConfirmedMandate }>>;
+  revokeMandate(mandateId: string): Promise<ApiResult<{ readonly mandate: ConfirmedMandate }>>;
+  simulatedProposal(mandateId: string, scenario: Scenario): Promise<ApiResult<SimulatedProposalResponse>>;
+  agentProposal(mandateId: string, mode: ShopMode, task?: string): Promise<ApiResult<AgentProposalResponse>>;
+  createAttempt(request: AttemptRequest): Promise<ApiResult<AttemptEnvelope>>;
+  getAttempt(attemptId: string): Promise<ApiResult<AttemptEnvelope>>;
+  settleAttempt(attemptId: string): Promise<ApiResult<AttemptEnvelope>>;
+  reconcileAttempt(attemptId: string): Promise<ApiResult<ReconcileEnvelope>>;
 };
+
+// An id in a path is encoded, so a link with a strange id cannot reach another route.
+const seg = (id: string): string => encodeURIComponent(id);
 
 export function createApiClient(options: { readonly fetcher?: Fetcher; readonly timeoutMs?: number } = {}): ApiClient {
   const fetcher: Fetcher = options.fetcher ?? ((input, init) => fetch(input, init));
@@ -211,5 +405,31 @@ export function createApiClient(options: { readonly fetcher?: Fetcher; readonly 
     draftMandate: (instruction) => call("POST", "/mandates/draft", { instruction }, parseDraftResponse),
     createMandate: (terms, intentSummary) => call("POST", "/mandates", { terms, intentSummary }, parseMandateEnvelope),
     listMandates: () => call("GET", "/mandates", undefined, parseMandateList),
+    getMandate: (mandateId) => call("GET", `/mandates/${seg(mandateId)}`, undefined, parseMandateEnvelope),
+    revokeMandate: (mandateId) => call("POST", `/mandates/${seg(mandateId)}/revoke`, undefined, parseMandateEnvelope),
+    simulatedProposal: (mandateId, scenario) =>
+      call("POST", `/mandates/${seg(mandateId)}/simulated-proposal`, { scenario }, parseSimulatedProposal),
+    agentProposal: (mandateId, mode, task) =>
+      call(
+        "POST",
+        `/mandates/${seg(mandateId)}/agent-proposal`,
+        task === undefined || task.trim() === "" ? { mode } : { mode, task: task.trim() },
+        parseAgentProposal,
+      ),
+    createAttempt: (request) =>
+      call(
+        "POST",
+        "/attempts",
+        {
+          attemptId: request.attemptId,
+          mandateId: request.mandateId,
+          proposal: request.proposal,
+          settleNow: request.settleNow,
+        },
+        parseAttemptEnvelope,
+      ),
+    getAttempt: (attemptId) => call("GET", `/attempts/${seg(attemptId)}`, undefined, parseAttemptEnvelope),
+    settleAttempt: (attemptId) => call("POST", `/attempts/${seg(attemptId)}/settle`, undefined, parseAttemptEnvelope),
+    reconcileAttempt: (attemptId) => call("POST", `/attempts/${seg(attemptId)}/reconcile`, undefined, parseReconcile),
   };
 }

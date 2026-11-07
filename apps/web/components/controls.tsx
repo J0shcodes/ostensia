@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRef } from "react";
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, Ref, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
 import styles from "./controls.module.css";
@@ -7,7 +8,8 @@ import styles from "./controls.module.css";
 type ButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "className"> & {
   // React 19 passes ref as an ordinary prop, so a caller can move focus to a button.
   readonly ref?: Ref<HTMLButtonElement>;
-  readonly variant?: "primary" | "secondary" | "text";
+  // "destructive" is for an action that cannot be undone (guidelines sections 6 and 12.7).
+  readonly variant?: "primary" | "secondary" | "text" | "destructive";
   // While busy the label becomes the action in progress, the button reports aria-busy,
   // and it cannot be pressed again (guidelines section 6).
   readonly busy?: boolean;
@@ -25,6 +27,16 @@ export function Button({ variant = "primary", busy = false, busyLabel, children,
     >
       {busy && busyLabel !== undefined ? busyLabel : children}
     </button>
+  );
+}
+
+// A link that looks like the primary or secondary button, for moving to another page.
+// It is a real link: it can be opened in a new tab, and it is announced as a link.
+export function ButtonLink({ href, variant = "primary", children }: { readonly href: string; readonly variant?: "primary" | "secondary"; readonly children: ReactNode }) {
+  return (
+    <Link href={href} className={`${styles["button"]} ${styles[variant]} ${styles["linkButton"]}`}>
+      {children}
+    </Link>
   );
 }
 

@@ -35,6 +35,38 @@
   background: var(--surface-100);
 }
 
+/* Irreversible actions: white, with the danger colour on the border and the text. */
+.destructive {
+  background: var(--surface-0);
+  border-color: var(--danger-700);
+  color: var(--danger-700);
+}
+
+.destructive:hover:not(:disabled) {
+  background: var(--danger-50);
+}
+
+/* A link drawn as a button: no underline, same box. */
+.linkButton {
+  text-decoration: none;
+}
+
+.primary.linkButton {
+  color: var(--surface-0);
+}
+
+.secondary.linkButton {
+  color: var(--ink-900);
+}
+
+.primary.linkButton:hover {
+  background: var(--brand-700);
+}
+
+.secondary.linkButton:hover {
+  background: var(--surface-100);
+}
+
 .text {
   padding: 0 var(--space-8);
   background: none;
@@ -53,7 +85,8 @@
 /* Full-width buttons on narrow screens. */
 @media (max-width: 639px) {
   .primary,
-  .secondary {
+  .secondary,
+  .destructive {
     width: 100%;
   }
 }
