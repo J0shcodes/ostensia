@@ -1,0 +1,194 @@
+/* Buttons and form controls (guidelines section 6). */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-8);
+  height: var(--control-height);
+  padding: 0 var(--space-16);
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  font-size: var(--text-14);
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 150ms, border-color 150ms;
+}
+
+.primary {
+  background: var(--brand-600);
+  color: var(--surface-0);
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--brand-700);
+}
+
+.secondary {
+  background: var(--surface-0);
+  border-color: var(--line-500);
+  color: var(--ink-900);
+}
+
+.secondary:hover:not(:disabled) {
+  background: var(--surface-100);
+}
+
+/* Irreversible actions: white, with the danger colour on the border and the text. */
+.destructive {
+  background: var(--surface-0);
+  border-color: var(--danger-700);
+  color: var(--danger-700);
+}
+
+.destructive:hover:not(:disabled) {
+  background: var(--danger-50);
+}
+
+/* A link drawn as a button: no underline, same box. */
+.linkButton {
+  text-decoration: none;
+}
+
+.primary.linkButton {
+  color: var(--surface-0);
+}
+
+.secondary.linkButton {
+  color: var(--ink-900);
+}
+
+.primary.linkButton:hover {
+  background: var(--brand-700);
+}
+
+.secondary.linkButton:hover {
+  background: var(--surface-100);
+}
+
+.text {
+  padding: 0 var(--space-8);
+  background: none;
+  color: var(--brand-600);
+}
+
+.text:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Full-width buttons on narrow screens. */
+@media (max-width: 639px) {
+  .primary,
+  .secondary,
+  .destructive {
+    width: 100%;
+  }
+}
+
+.input,
+.select,
+.textarea {
+  width: 100%;
+  min-height: var(--control-height);
+  padding: 0 var(--space-12);
+  background: var(--surface-0);
+  border: 1px solid var(--line-500);
+  border-radius: var(--radius-control);
+  color: var(--ink-900);
+  font-size: var(--text-16);
+}
+
+/* A placeholder is an example, not a value: ink-500 (4.5:1 on white), fully opaque so the
+   colour is exactly the token in every browser. Guidelines section 6. */
+.input::placeholder,
+.textarea::placeholder,
+.money input::placeholder {
+  color: var(--ink-500);
+  opacity: 1;
+}
+
+.textarea {
+  min-height: 96px;
+  padding: var(--space-8) var(--space-12);
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.input[aria-invalid="true"],
+.select[aria-invalid="true"],
+.textarea[aria-invalid="true"],
+.money[data-invalid="true"] {
+  border-color: var(--danger-700);
+}
+
+.input:read-only,
+.select:disabled {
+  background: var(--surface-100);
+  color: var(--ink-700);
+}
+
+/* A money field: "$" before, "USD" after, one border around all of it. */
+.money {
+  display: flex;
+  align-items: center;
+  height: var(--control-height);
+  background: var(--surface-0);
+  border: 1px solid var(--line-500);
+  border-radius: var(--radius-control);
+}
+
+.money:focus-within {
+  outline: 2px solid var(--brand-600);
+  outline-offset: 2px;
+}
+
+.money input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 var(--space-4);
+  background: transparent;
+  border: 0;
+  font-size: var(--text-16);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The wrapper shows focus for the whole field. */
+.money input:focus-visible {
+  outline: none;
+}
+
+.affix {
+  padding: 0 var(--space-12);
+  color: var(--ink-700);
+  font-size: var(--text-14);
+}
+
+.affix:first-child {
+  padding-right: var(--space-4);
+}
+
+.affix:last-child {
+  padding-left: var(--space-4);
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-height: var(--control-height);
+  font-size: var(--text-16);
+}
+
+.choice input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--brand-600);
+}

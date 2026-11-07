@@ -1,0 +1,39 @@
+/* The audit record (guidelines section 13). Every entry is a nested provenance panel, so
+   the colours, borders and badges come from provenance.module.css; this only lays them
+   out as an ordered list. */
+
+.entries {
+  display: grid;
+  gap: var(--space-12);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.entry {
+  display: grid;
+  gap: var(--space-8);
+  min-width: 0;
+}
+
+.time {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4) var(--space-12);
+  font-size: var(--text-13);
+  color: var(--ink-700);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-13);
+  overflow-wrap: anywhere;
+}
+
+.detail {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-13);
+  color: var(--ink-700);
+  overflow-wrap: anywhere;
+}

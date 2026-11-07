@@ -1,0 +1,62 @@
+.item {
+  display: grid;
+  gap: var(--space-16);
+  min-width: 0;
+  padding: var(--space-16);
+  background: var(--surface-0);
+  border: 1px solid var(--line-300);
+  border-radius: var(--radius-card);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-12);
+}
+
+.title {
+  font-size: var(--text-16);
+  font-weight: 600;
+}
+
+.pair {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-16);
+}
+
+/* Side by side from 640px. The two fields share four rows (label, control, help, error), so
+   their controls line up even when one label wraps onto a second line, and when only one
+   field shows help or an error. Each field keeps its own 4px spacing between rows. */
+@media (min-width: 640px) {
+  .pair {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto auto auto;
+    row-gap: 0;
+  }
+
+  .pair > div {
+    display: grid;
+    grid-row: span 4;
+    grid-template-rows: subgrid;
+    row-gap: var(--space-4);
+  }
+}
+
+.choices {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.flag {
+  font-size: var(--text-13);
+  color: var(--warning-700);
+}
+
+.productLabel {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8);
+}

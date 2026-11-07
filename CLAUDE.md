@@ -88,6 +88,8 @@ For every significant increment:
 
 A response to one stage is not permission to skip subsequent stages.
 
+These steps apply regardless of which model is in use (see section 13).
+
 ## 6. No autonomous full build
 
 Never implement multiple unapproved increments in one run.
@@ -206,3 +208,55 @@ An increment is complete only when:
 - The developer explicitly approves the proposed commit.
 
 Do not proceed to another increment until the developer confirms.
+
+## 13. Model usage and review policy
+
+### Default model
+
+Use Claude Sonnet 5.5 as the default implementation model for
+Increment 7a and Increment 7b.
+
+### When to use Claude Opus 5.5
+
+Use Claude Opus 5.5 selectively for:
+- Complex architectural decisions.
+- Difficult debugging that Sonnet cannot resolve cleanly.
+- Cross-package and Next.js build integration issues.
+- Review of transaction-state handling and payment-related behaviour.
+- Read-only reviews of completed increments.
+
+Opus reviews must not automatically modify the repository.
+
+### Requesting an Opus review
+
+When requesting an Opus review:
+1. Provide the approved implementation specification.
+2. Provide the relevant brand guidelines and decision records.
+3. Ask it to inspect the actual implementation and tests.
+4. Require specific findings with file paths and line references.
+5. Ask it to distinguish confirmed defects from potential risks.
+6. Require proposed corrections rather than allowing it to implement them.
+7. Review and approve any correction before implementation.
+
+### Switching models
+
+Do not switch models simply because a task is long.
+Switch when the task's complexity, unresolved issues or risk
+justifies the additional reasoning capability.
+
+### Approval gates
+
+Maintain the existing approval gates regardless of model.
+
+## 14. Frontend visual identity
+
+Before making or modifying any frontend UI (apps/web), read
+docs/design/OSTENSIA_BRAND_GUIDELINES.md. It is the canonical source of truth
+for Ostensia's visual identity, interface language and provenance system.
+
+- Do not introduce a new colour, font, typography rule, visual language or
+  component convention without the developer's approval.
+- Do not substitute or adjust approved tokens. If a requirement conflicts with
+  the guidelines, or a contrast check fails, stop and explain the conflict
+  instead of changing the specification.
+- Every Increment 7 and later frontend plan must reference the guidelines.

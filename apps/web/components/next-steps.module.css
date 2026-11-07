@@ -1,0 +1,34 @@
+.stack {
+  display: grid;
+  gap: var(--space-16);
+  min-width: 0;
+}
+
+.group {
+  display: grid;
+  gap: var(--space-8);
+  justify-items: start;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-12);
+}
+
+.note {
+  font-size: var(--text-14);
+  color: var(--ink-700);
+}
+
+.help {
+  max-width: 64ch;
+  font-size: var(--text-13);
+  color: var(--ink-700);
+}
+
+@media (max-width: 639px) {
+  .group {
+    justify-items: stretch;
+  }
+}

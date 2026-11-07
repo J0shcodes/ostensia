@@ -1,0 +1,11 @@
+.stack {
+  display: grid;
+  gap: var(--space-12);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-12);
+}

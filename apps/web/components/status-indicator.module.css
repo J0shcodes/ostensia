@@ -1,0 +1,63 @@
+/* The status indicator (guidelines section 6, 12.5). The label takes the status colour
+   (-700) on its tint (-50); the explanation stays in the primary ink colour. The neutral
+   and in-progress looks use no tint: ink-700 on white. */
+
+.indicator {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-12) var(--space-16);
+  border: 1px solid var(--line-300);
+  border-radius: var(--radius-control);
+  background: var(--surface-0);
+  color: var(--ink-900);
+}
+
+.label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  font-size: var(--text-14);
+  font-weight: 600;
+  color: var(--ink-700);
+}
+
+.line {
+  font-size: var(--text-14);
+  font-weight: 400;
+}
+
+.danger {
+  background: var(--danger-50);
+  border-color: color-mix(in srgb, var(--danger-700) 30%, transparent);
+}
+
+.danger .label {
+  color: var(--danger-700);
+}
+
+.warning {
+  background: var(--warning-50);
+  border-color: color-mix(in srgb, var(--warning-700) 30%, transparent);
+}
+
+.warning .label {
+  color: var(--warning-700);
+}
+
+.hold {
+  background: var(--hold-50);
+  border-color: color-mix(in srgb, var(--hold-700) 30%, transparent);
+}
+
+.hold .label {
+  color: var(--hold-700);
+}
+
+.success {
+  background: var(--success-50);
+  border-color: color-mix(in srgb, var(--success-700) 30%, transparent);
+}
+
+.success .label {
+  color: var(--success-700);
+}

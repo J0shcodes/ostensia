@@ -1951,6 +1951,434 @@ A proxy limit shorter than the AI calls that cannot be handled in the UI, or hos
 ### Follow-up
 None beyond Increment 7.
 
+## Decision D-028 — Ostensia's visual identity and the brand guidelines
+
+Date: 2026-11-06
+Status: Accepted (2026-11-06, by the developer)
+Related increment: Increment 7 onward
+Related findings: Brand audit 2026-11-06 (no existing Ostensia brand assets in the
+repository); Report 06 §4.2-§4.3; D-024, D-027; EV-01 (third-party trademarks in the video)
+Related risks: A generic or inconsistent interface; provenance blurred between AI,
+Ostensia, the person and PayPal; claims the product cannot support
+
+### Context
+Increment 7 builds the first UI. The repository held no logo, colours or fonts for
+Ostensia; the only styling was a spike report generator's defaults. The interface
+must make the source of each piece of content clear (AI, deterministic rules, the
+person, PayPal Sandbox, the simulated shop).
+
+### Options considered
+1. A deliberate identity: quiet, precise financial infrastructure, with provenance
+   as the defining principle, specified in a canonical document.
+   - Benefits: coherent, reviewable, and it makes the product's honesty visible.
+   - Costs/risks: design time before implementation.
+2. A framework starter or component library defaults.
+   - Benefits: fastest.
+   - Costs/risks: generic; no provenance language; new dependencies.
+
+### Decision
+Option 1, specified in docs/design/OSTENSIA_BRAND_GUIDELINES.md (version 1.0), the
+canonical source of truth for the frontend's visual identity. Within it: the text
+wordmark "Ostensia" and no symbol; the light theme and teal palette; IBM Plex Sans
+and Mono through next/font, served locally (D2); the provenance system; an explicit
+"Use this draft in the form" step (D3); an API availability indicator worded
+"Ostensia API available / unreachable" and limited to the Fastify API (D4).
+Client-side mandate validation with the domain's runtime MandateTermsSchema (D1) is
+approved subject to verification (the runtime dependency graph, the Next.js
+workspace compile, the production build and the browser bundle) and will be recorded
+with Increment 7a's frontend decision as a deliberate exception to the type-only
+import approach. The server-side gate stays authoritative. Contrast adjustments
+made before adoption: success-700 #1B7F4B to #1A7C49; new token line-500 #8792A6
+for form-control borders.
+
+### Rationale
+The judging weighs a complete product experience and a clear demonstration; the
+product's credibility rests on showing who decided what.
+
+### Trade-offs
+Light theme only; plain CSS without a component library; hand-drawn icons.
+
+### Verification
+Contrast computed for every pairing (WCAG 2.2 AA). The Increment 7a walkthrough
+checks the guidelines on screen.
+
+### Revisit trigger
+A requirement that conflicts with the guidelines, a failed contrast check, or a
+decision to add dark mode.
+
+### Follow-up
+CLAUDE.md section 14 requires reading the guidelines before frontend work.
+
+## Decision D-029 — The web app: stack, dependencies, and what the browser can see
+
+Date: 2026-11-06
+Status: Accepted (developer approval, 2026-11-06, after the developer's own walkthrough).
+The plan it follows was approved on 2026-11-06 (Increment 7a as proposed, the recommended
+option for A1 to A7, the pinned versions, and the runtime import of MandateTermsSchema
+subject to verification). This record adds what the build and the browser runs showed.
+Related increment: Increment 7a (scaffold, the D-027 rewrite, the mandate screen)
+Related findings: D-006, D-026, D-027, D-028; docs/design/OSTENSIA_BRAND_GUIDELINES.md;
+docs/evidence/frontend/MANDATE_WALKTHROUGH.md; Reports 03, 04 and 06 in
+docs/research/mid-build-validation/
+Related risks: A proxy cutting off a slow AI call; a configuration value reaching the
+browser; client-side limits drifting from the gate's; a mandate created twice; a
+dependency added without need
+
+### Context
+Increment 7a builds the first screen. D-027 chose a Next.js rewrite, and D-028 chose the
+identity and approved running the domain's MandateTermsSchema in the browser, subject to
+verification. A spike in a scratch workspace (2026-11-06) and the build itself established
+facts that were not known when those were decided.
+
+### Options considered
+1. The proposed arrangement: Next.js 16.4.5 with a rewrite, the narrow runtime domain
+   import, plain CSS, next/font, a tested pure `lib/`, and scan tests that enforce the
+   boundaries.
+   - Benefits: no CORS, no new backend code, the limits are not copied, every rule is
+     checked by a test.
+   - Costs/risks: about 110 KB (31 KB gzip) of the client bundle is the schema; the proxy
+     option is experimental; the first build needs internet for fonts.
+2. Direct browser calls with CORS, type-only domain imports, or a component library.
+   Rejected in D-027, D-028 and the Increment 7 plan.
+
+### Decision
+Option 1.
+- Dependencies in apps/web, all pinned exactly and all MIT: next 16.4.5 (3 Nov 2026; its
+  release notes list seven moderate advisories, none in features used here), react and
+  react-dom 19.3.1, @types/react and @types/react-dom 19.3.0, @types/node 24.19.2 (the
+  version apps/api already uses). The registry showed none deprecated and `latest` equal to
+  each pin, and `pnpm audit` on the repository lockfile found no known vulnerabilities.
+  Next's optional `sharp` (image optimisation) entered the lockfile and is unused. No
+  other package was added: no UI, state, data-fetching, CSS, icon or test-rendering library.
+- The rewrite: next.config.ts forwards /api/:path* to API_ORIGIN, parsed by api-origin.ts
+  (exactly http://127.0.0.1:<port>, a port from 1 to 65535, nothing else; the error
+  message never prints the value). `transpilePackages` is not needed: Turbopack compiles a
+  TypeScript workspace package on its own, and the build passed without it.
+- `experimental.proxyTimeout` is set to 120000 ms. Next.js proxies a rewrite with a 30 s
+  timeout and then answers a plain-text 500 (observed: a 40 s upstream was cut at 30.04 s;
+  with the option it completed at 40.02 s). 120 s is a placeholder until real AI latency is
+  measured (TD-031). The option is experimental, which is why Next.js is pinned.
+- The API origin is read when next.config.ts loads. `next build` writes it into
+  .next/routes-manifest.json (a server-side file), so it must be set before building;
+  `next dev` reads it at startup.
+- The runtime import of the domain (D1) is a deliberate exception to the type-only
+  approach, limited to four values: MandateTermsSchema, ConfirmedMandateSchema, formatUsd
+  and canonicalize. A scan test fails if any other value is imported. Verified: the
+  dependency graph is zod and the domain's own files; the build compiles the package; the
+  schema adds about 110 KB raw (31 KB gzip) to the client; unrelated domain modules (payment
+  actions, PayPal statuses, explanations) are tree-shaken out. The gate stays authoritative.
+- Validation is in two stages. Typed text becomes values (money by string arithmetic, local
+  time to UTC with a round-trip check), then the domain schema judges the values. Messages
+  quote the numbers the schema reports; no limit is copied. The one limit that is copied is
+  the API's 2,000-character description length (apps/api/src/routes/draft.ts), because it
+  is not exported anywhere the web app may import (TD-033).
+- API results have three outcomes: ok, an error the API sent (always JSON), and unreachable.
+  A server error that is not JSON is the proxy giving up, and is reported as unreachable.
+  Nothing is retried by the client.
+- Creating a mandate is not idempotent (each POST makes a new id), so when a confirmation
+  does not come back, the page lists the mandates and shows any with exactly the same
+  terms and summary, and the person chooses. A timeout is not a failure (CLAUDE.md section 7).
+- Fonts: IBM Plex Sans and Mono through next/font/google. The files are downloaded when the
+  app is built and served by the app; the browser makes no request to Google. The first
+  build or dev start needs internet; a rebuild with an existing .next does not; a clean build
+  with no network fails (TD-032).
+- Styling: tokens as CSS variables in app/globals.css, component styles as CSS Modules,
+  no raw colour outside globals.css. A test compares the tokens, spacing, radii, sizes and
+  the approved interface strings with the guidelines document, and recomputes contrast.
+
+### Rationale
+It is the smallest arrangement that meets D-026 to D-028 and keeps every rule checkable.
+Reading the build and driving the real stack showed what each decision costs.
+
+### Trade-offs
+- The browser carries the schema (31 KB gzip) so that the form and the gate agree.
+- Every API call passes through the Next.js server, whose proxy timeout is an experimental
+  setting.
+- No automated component tests (TD-030). Logic lives in `lib/` and is tested; components are
+  checked by build, scan tests and a browser walkthrough.
+- A confirmation with no clear answer needs a decision from the person.
+
+### Verification
+Checks of 2026-11-06 (details in docs/evidence/frontend/MANDATE_WALKTHROUGH.md):
+- pnpm test: 56 files, 1686 tests pass (267 new). pnpm typecheck passes. 41 of 41 deliberate
+  mutations of the new logic and scan tests were caught.
+- D-027 criteria: (1) every browser request is a same-origin /api path (scan test, and the
+  network log of a real browser run); (2) the API origin value is in no browser-delivered
+  asset and no NEXT_PUBLIC_ variable exists (build scan and test); (3) GET /api/health, the
+  catalogue, a draft refusal, a created mandate and a refusal all reached the real Fastify
+  API through the rewrite; (4) a 40 s response completed through the rewrite; the developer
+  then timed the real draft route once, with a real key, at about 16 to 18 s (one sample,
+  not a distribution; 120 s remains a placeholder, TD-031);
+  (5) with the API stopped the page says "Ostensia API unreachable" and shows no address,
+  port or trace; (6) no CORS package, no CORS header, and no direct connection to Fastify.
+- D-026 verification 2 (no Anthropic key): the manual path confirmed a mandate in a headless
+  browser against the real API with no key. The developer then repeated it by hand (checklist
+  section A) with no problems. Verification 1 (a clean clone) waits for the README.
+- The developer's walkthrough (2026-11-06, checklist sections A to F, reported by the
+  developer): no problems in A, C, D, E; the design judgement (F) was favourable. In B, a first
+  draft on a poor connection ended with the page's "The AI service took too long to answer"
+  message (the API's own provider-timeout message, not the proxy's), left the form untouched,
+  and a second attempt after the network recovered worked. The developer recalls the failure
+  at about 30 s; the API's configured provider timeout is 90 s, and the gap is unexplained
+  (the recalled time is approximate).
+- A first browser run found four defects, fixed before this record: a quantity input stretched
+  beside a two-line label; badges scattered to opposite ends of a header; a money field whose
+  real input was 38px with a dead "$" and "USD"; a header 57px instead of 56px.
+
+### Revisit trigger
+Real AI latency above 120 s; Next.js changing or removing proxyTimeout; the client bundle
+becoming a problem; hosting (D-026); a request to add an automated component test.
+
+### Follow-up
+Done: the developer's walkthrough, including one timed real draft. Note the provider-timeout
+gap above if it recurs (time it on a clock). Increment 7b (proposals, attempts and audit)
+needs its own proposal.
+
+## Decision D-030 — The proposal and result screens: caller-chosen attempt ids, provenance that is true, and no automatic resend
+
+Date: 2026-11-06
+Status: Accepted (developer approval, 2026-11-07, after the developer's sandbox walkthrough).
+The plan it follows (Increment 7b: the split into 7b and 7c, routes, both actions, the status
+wording, the four conventions in guidelines section 12.7, and a first step that updates the
+guidelines) was approved on 2026-11-06. This record adds what the build and the browser runs
+showed, and four points that were not in the plan (listed under "Points the developer
+confirmed").
+Related increment: Increment 7b (the audit view is 7c)
+Related findings: D-012, D-022, D-025, D-027, D-028, D-029; TD-026, TD-027, TD-029, TD-034;
+docs/design/OSTENSIA_BRAND_GUIDELINES.md (version 1.1, section 12);
+docs/evidence/frontend/PROPOSAL_RESULT_WALKTHROUGH.md
+Related risks: A purchase attempt created twice; a "PayPal Sandbox" label on something that
+never reached PayPal; an unknown outcome shown as a failure; a copied list drifting from the
+API; the AI agent shown as having approved or paid
+
+### Context
+Increment 7b gives the web app steps 2 and 3: choose a cart, have the gate check it, and see
+what happened. Unlike a mandate, an attempt is idempotent on the server when the caller picks
+its id (apps/api/src/gate/gate.ts, sameRequest), so the page can be built differently from the
+mandate screen. The first browser run with an allowed cart also showed that one status
+(create_rejected) can mean either "PayPal refused the order" or "no order ever left", which
+changes whether a PayPal label is true.
+
+### Options considered
+1. Two routes, /mandates/[id] and /attempts/[id], with all state on the server; the browser
+   picks the attempt id; the page never resends by itself.
+   - Benefits: a reload or a shared link shows the same thing; a lost answer is resolved by a
+     read; the PayPal and source labels are decided from records, not from the page's memory.
+   - Costs/risks: two more pages to keep in step with the guidelines; the status table is a
+     copy of the gate's list (guarded by a test).
+2. One single-page state machine that holds the proposal and the result in memory.
+   - Benefits: fewer files.
+   - Costs/risks: a reload loses the attempt; a lost answer has nowhere to be read back; not
+     linkable for the demo. Rejected in the plan.
+
+### Decision
+Option 1.
+- Routes: /mandates/[id] (step 2) and /attempts/[id] (step 3). A step the person has already
+  reached is a link in the step indicator; later steps are not interactive.
+- The browser makes the attempt id (crypto.randomUUID) before it sends anything. The same id
+  with the same request is the same attempt on the server, so a request whose answer was lost
+  can be sent again safely. The page still never does so on its own: "Check status" is a read
+  (GET /attempts/:id); "Try again" is offered only after that read says the attempt does not
+  exist (404), and sends the identical request with the same id. This is the opposite of the
+  mandate screen (D-029), where each POST makes a new mandate and the page must look for a
+  match instead.
+- Classifying what came back: a 4xx, or 503 gate_faulted, is a refusal and means the request
+  did nothing; a 502 read_failed that carries an attempt means the attempt exists and nothing
+  was written, so the page opens it; everything else (no answer, a timeout, a plain-text proxy
+  500, an answer the page does not understand, any other 5xx) is "not confirmed", never
+  "failed".
+- The 19 attempt statuses are described in lib/attempt-status.ts and match guidelines 12.5
+  word for word (a test compares every row). The page offers only what the status allows
+  (settle and revoke while funds are on hold; reconcile for write_unknown, capture_pending and
+  write_refused); the gate still decides. Four statuses have no way forward in the API
+  (create_unknown, anomaly, write_rejected, conflict): the page says so (TD-034).
+- A PayPal Sandbox badge and rule appear only if a PayPal operation took place. That is read
+  from the attempt's audit events (GET /attempts/:id returns them): an order_result or
+  write_result with the outcome "not_sent" is a request that never left, and a settle read
+  that failed before a token (detail "token_...") did not reach PayPal either. Status alone
+  is not enough: with placeholder credentials the gate recorded create_rejected after the
+  token was refused, with no order sent.
+- Where a cart came from (the AI agent or the simulated shop) is remembered in a plain
+  variable for as long as the page stays open, and shown as "as labelled when proposed". After
+  a reload the page says the audit log does not record it (TD-027). Nothing is written to the
+  browser's storage (a test checks).
+- The scenario list, the two shop modes and the attempt-status list are copied from the API
+  because the web app may not import from it. api-drift.test.ts reads the API's source as text
+  and fails if any of them changes there and not here.
+- An id in the address is decoded once (lib/route-id.ts) because Next.js hands the page the
+  segment still encoded, and the API client encodes again. Found in the browser run: without
+  it an id containing ":" (which the API allows) would have been asked for as "%253A".
+- The word PayPal may now appear in the web app, but only in the files that show or explain a
+  PayPal operation (an allow-list in web-boundaries.test.ts); the mandate-creation files must
+  still never mention it.
+- No dependency was added, the runtime domain import is still the four values of D-029, and
+  nothing in apps/api or packages/domain changed. The guidelines are version 1.1, with section
+  12 and its four conventions approved.
+
+### Rationale
+It reuses what the API already guarantees (a caller-chosen id is idempotent) instead of
+re-creating a defence for a problem this endpoint does not have, and it keeps every label
+true by reading it from the records rather than inferring it from the page's own history.
+
+### Trade-offs
+- An attempt that has no recovery in the API (TD-034) ends in a page that can only report it.
+- The source of a cart is lost on reload (TD-027, accepted for the MVP).
+- Three lists are copied (guarded by a test, TD-035), and components still have no automated
+  tests (TD-030).
+- The page cannot show the real hold, capture, void or reconcile in an automated run, because
+  that needs the developer's PayPal Sandbox credentials.
+
+### Verification
+Checks of 2026-11-06 (details in docs/evidence/frontend/PROPOSAL_RESULT_WALKTHROUGH.md):
+- pnpm test: 64 files, 1825 tests pass (139 new). pnpm typecheck passes. 40 of 40 deliberate
+  mutations of the new logic, scan tests and style tests were caught. No dependency changed.
+- A headless Chrome run against the real API (placeholder values, no AI key): 78 of 78 checks
+  passed, including a blocked cart (decision in plain words, no PayPal panel, nothing more to
+  do), "check and settle" in one step, an allowed cart with placeholder credentials (status
+  "Order not created", no false success, no PayPal treatment), a reply lost after the attempt
+  was created (one POST, no automatic resend, "Check status" found the one attempt), a request
+  lost before it arrived (404, then "Try again" with the same id, one attempt), a revoked
+  mandate, unknown and hostile ids, four viewport widths, arrow-key radio selection, and a
+  console with only the answers the run provoked on purpose.
+- One defect found by that run and fixed: the double-encoded route id.
+- Not exercised in the automated browser run: any real hold, capture or void; the PayPal
+  Sandbox badge and rule; the AI agent's cart; the "mandate in use" notice; Copy on the new
+  ids; a human's judgement of the design. These were Part 2 of the evidence file, which the
+  developer ran on 2026-11-07 (next bullet).
+- The one placeholder-credential run sent one token request carrying a fictional client id and
+  secret to PayPal's sandbox token endpoint, which refused it (audit detail "token_rejected").
+  No order was created and no real credential was used.
+- The developer's sandbox walkthrough (2026-11-07, sections A to I of the evidence file, with
+  real PayPal Sandbox credentials and an Anthropic key; reported by the developer): an allowed
+  cart reached "Funds on hold" and then "Captured" in two steps and in one step, with order,
+  authorization and capture ids shown; revoke then settle ended in "Voided" with the approved
+  wording; a second attempt on a held mandate was refused with a link to the attempt; blocked
+  carts were blocked at the pre-check; the AI agent's cart took about 3 to 5 s, an uninformed
+  cart was blocked, and an agent cart passed the pre-check and the final check and was
+  captured; after the API was stopped and restarted, "Check status" showed the state the audit
+  log held. The design judgement was favourable, and nothing said the AI approved or paid.
+- Not exercised anywhere: "Check PayPal's record" (reconcile), which needs an attempt in
+  write_unknown, capture_pending or write_refused, and the notice for a request that went
+  nowhere while funds are on hold (a settle whose read of the authorization failed). Both are
+  covered by tests of the status table and the client, not by a run.
+- One thing the developer noticed: the simulated "Compliant" cart has one item for a mandate
+  with two. That is the API's scenario by design (D-012: one unit of the first product that
+  fits). The scenario's description was reworded to say so; nothing in apps/api changed.
+
+### Revisit trigger
+A real sandbox run that shows a status or label the table does not describe; a change to the
+gate's statuses or to what the API returns for an attempt; a request to record a cart's source
+in the audit log (TD-027); a component test setup (TD-030).
+
+### Points the developer confirmed
+These were not in the approved plan. The developer ticked all four in the walkthrough and
+approved D-030 on 2026-11-07.
+1. When an attempt reached the order step but no order request left (create_rejected after a
+   refused token), the page shows a plain "Payment" panel with "No order was sent to PayPal
+   Sandbox." and no PayPal treatment. Guidelines 12.3 say the payment panel is shown only if a
+   PayPal call was made; this is a reading of it, and the one sentence is new.
+2. Strings and titles that section 12 does not specify: the page title "Purchase result"; panel
+   titles "Decision", "Payment", "Next steps", "Cart", "Your mandate" and "Proposed cart"; the
+   "Next steps" panel carries no provenance badge; the help line under "Settle this
+   authorization"; the two sentences for a request that went nowhere while funds are on hold;
+   the text for a reconcile with nothing to check; "Still working. The agent can take a
+   while."
+3. The two source panels sit side by side from 1024px and stack below it (section 12.6 said
+   they stack below 640px).
+4. The app has no favicon (the guidelines forbid inventing a logo), so a browser logs a 404 for
+   /favicon.ico. Leave it, or approve a blank icon.
+
+### Follow-up
+Done: the developer's sandbox walkthrough (Part 2 of the evidence file); TD-026 is resolved by
+its agent run. Increment 7c (the audit timeline and the list of attempts) needs its own
+proposal.
+After acceptance, at the developer's request (2026-11-07): example placeholders were added to
+the AI description, the AI agent's task, and the mandate form's summary, total, quantity and
+unit price (guidelines version 1.2, sections 6 and 10). They are examples of valid values, in
+ink-500, never defaults; the expiry has none. The AI description's placeholder was the
+developer's own wording. This was not part of D-030's plan. In the same change, the unit-price
+field no longer sits lower than the quantity field beside it when its label wraps (a layout
+flaw from 7a): the two fields now share rows (CSS subgrid), checked at 1280, 1024, 768 and 640px
+with and without help and error text.
+
+## Decision D-031 — The audit record and the list of attempts: read-only, one wording table, and a PayPal badge only for a request that was sent
+
+Date: 2026-11-07
+Status: Accepted (developer approval, 2026-11-07: "Go ahead with the proposal and the recommended
+decisions", which approved the plan and the six decisions A1 to A6 below, including the wording
+table written into guidelines section 13).
+Related increment: Increment 7c
+Related findings: D-008, D-028, D-030; TD-027, TD-030, TD-036;
+docs/design/OSTENSIA_BRAND_GUIDELINES.md (version 1.3, section 13)
+Related risks: A PayPal badge on something that was not sent; a record that hides or reorders
+  what the log holds; wording that implies the stored reference proves something.
+
+#### Context
+CLAUDE.md section 1, step 7: the person can inspect an explanation and an audit record of the
+decision. The result page showed the explanation but not what Ostensia logged, and an attempt
+could only be reached by its link. GET /attempts/:id already returns the attempt's events and
+GET /attempts returns every attempt, so the API needed no change.
+
+#### Options considered
+1. The record as a fourth panel on the result page, and a new /attempts list page (chosen).
+   - Benefits: the decision and its record sit together; no API or domain change; reuses the
+     provenance panel, status indicator and Copy control.
+   - Costs/risks: a long result page.
+2. A separate audit page per attempt.
+   - Benefits: a shorter result page.
+   - Costs/risks: one more route and one more step in the demo.
+3. A dashboard with counts and charts.
+   - Rejected: guidelines section 11 (no dashboard tiles or decorative charts).
+
+#### Decision
+- Decisions A1 to A6 as proposed: the record is on the result page (A1); the reference stored
+  with the payment is shown, worded only as "Reference stored with the payment" (A2); the list
+  is reached by a text link "All purchase attempts" on the proposal and result pages, and the
+  header is unchanged (A3); the gate's detail strings are shown as recorded (A4); no API
+  change, the missing revocation event is TD-036 (A5); the wording table is part of guidelines
+  section 13 (A6).
+- Each event is one entry, in the order the log holds it. An event of a kind the page does not
+  know is shown as "Unrecognised event" with its type, never hidden.
+- An entry gets the "PayPal Sandbox" treatment only if it reflects a request that was sent
+  (the rule 7b uses for the Payment panel). A request recorded before it was sent, and one
+  that was not sent, are Ostensia's own entries.
+- The list is a read. One record the page cannot read makes the whole list an error, because a
+  list with a hole would look complete.
+- No new runtime import from the domain package: decision wording is the API's explanation.
+
+#### Rationale
+The log is the source of truth (D-008) and the page only describes it. Putting every sentence
+in one table that the guidelines test compares word for word keeps the document and the code
+from drifting, and a drift test against apps/api/src/gate/events.ts fails if the gate gains an
+event type the page does not describe.
+
+#### Trade-offs
+- The log does not record when a mandate was revoked for an attempt (TD-036), nor where a cart
+  came from (TD-027).
+- The API sends one explanation of each decision, so only the latest pre-check and final check
+  show it.
+- Components still have no automated tests (TD-030): their rendering is checked by the browser
+  run only.
+
+#### Verification
+pnpm test (68 files, 1958 tests) and pnpm typecheck pass. Thirteen small deliberate changes to
+the new code: twelve are caught by the tests; the thirteenth (drawing every entry as PayPal) is
+a component change, caught only by the browser run. Browser run against the real API with
+placeholder PayPal values (61 of 61 checks): the empty list, a blocked attempt, an attempt that
+never reached PayPal, the list at six widths, the error and unreadable-record states. The
+entries that follow a real PayPal answer were rendered from SYNTHETIC data served by the
+browser, which checks how the page draws them and is not evidence about PayPal. Not verified
+by the assistant: a real capture's and a real void's record. The developer's sandbox check
+(2026-11-07) covered those and the list: every item passed, as reported by the developer
+(not independently observed by the assistant).
+
+#### Revisit trigger
+A real sandbox run that shows an entry the table describes wrongly; a new event type in the
+gate; a request to record a cart's source or a mandate's revocation time per attempt.
+
+#### Follow-up
+TD-036. The developer's sandbox check of a capture's and a void's record.
+
 ## Template for later entries
 
 ### Decision D-NNN — [Title]

@@ -905,6 +905,200 @@ each rejected) and the schema test that shows the ids are sent as description te
 ### Questions I still cannot answer
 - (To be written by the developer.)
 
+## Topic: A request that did not come back is not a request that failed
+
+### Plain-language explanation
+Between the browser and the API there is now a middle step: the Next.js server forwards
+each /api request. That step can give up on its own. Observed: after 30 seconds it stops
+waiting and answers a plain-text "Internal Server Error", and it does the same when the API
+is down. The API may still be working on the request. So from the page's side "no answer"
+means "unknown", not "no". For a read (a draft) that is harmless: ask again. For a write
+that makes something new each time (creating a mandate gives it a new id), asking again can
+make a second one. So the page does not retry on its own. It asks the API what exists, shows
+any mandate with exactly the same terms, and lets the person choose.
+
+### Where it appears in Ostensia
+apps/web/lib/api.ts (the three outcomes, and non-JSON server errors read as "unreachable"),
+apps/web/lib/mandate-match.ts, components/confirm-outcome.tsx and mandate-screen.tsx (the
+"could not confirm" flow), next.config.ts (the proxy timeout), D-027 and D-029, TD-031.
+
+### Why this design was selected
+CLAUDE.md section 7 says a timeout does not mean an operation failed, and the gate already
+treats an unanswered PayPal write as "unknown" and never "failed". The page follows the same
+rule one layer up.
+
+### Alternative
+Retry automatically, or disable the button after any error. Automatic retry can create a
+duplicate; disabling leaves the person stuck. Neither was selected.
+
+### Failure case
+A mandate is created but the reply is lost. The page reports that it could not confirm,
+finds the mandate, and offers "Use this mandate". One mandate exists, not two.
+
+### Evidence
+api.test.ts (a plain-text 500 is "unreachable"; the API's own JSON 500 is not; no retry),
+mandate-match.test.ts, and the browser run in docs/evidence/frontend/MANDATE_WALKTHROUGH.md
+("reply lost" and "request lost" scenarios, with the POST and mandate counts).
+
+### Explain it to a judge
+(To be written by the developer.)
+
+### Questions I still cannot answer
+- (To be written by the developer.)
+
+## Topic: One schema in the gate and in the browser
+
+### Plain-language explanation
+The form needs to say "that quantity is too large" before anything is sent. Writing those
+limits again in the web app would give two copies that drift apart. Instead the form turns
+what was typed into values and then runs the domain's own MandateTermsSchema, the schema the
+gate uses. The messages quote the numbers the schema reports, so there is no copied limit.
+This is only for the person's convenience: the gate checks everything again and decides.
+It costs about 31 KB of compressed JavaScript in the browser, which was measured.
+
+### Where it appears in Ostensia
+apps/web/lib/mandate-form.ts (validateForm), apps/web/web-boundaries.test.ts (only four
+values may be imported from the domain at run time), D-028 (D1) and D-029.
+
+### Why this design was selected
+A form that accepts something the gate then refuses is a worse experience than one that
+agrees with the gate, and a copied rule is a bug waiting for the next change to the original.
+
+### Alternative
+Type-only imports and a hand-written copy of the rules, or a new API endpoint that publishes
+the limits. The first duplicates rules; the second changes the backend.
+
+### Failure case
+The domain adds a rule the messages do not explain. The form still refuses the value and shows
+"This value is not accepted", rather than letting it through.
+
+### Evidence
+mandate-form.test.ts (limits are read from the schema: the quantity, item count, summary
+length and minimum amounts), and the deliberate mutation that removed the schema call, which
+the tests caught.
+
+### Explain it to a judge
+(To be written by the developer.)
+
+### Questions I still cannot answer
+- (To be written by the developer.)
+
+## Topic: An id you choose yourself is what makes a retry safe
+
+### Plain-language explanation
+When a request does not come back, you cannot tell whether it worked. Sending it again is only
+safe if the server can recognise the second request as the same one. The usual way is for the
+caller to make up an identifier before sending, and for the server to treat "same identifier,
+same request" as one operation. Creating a mandate has no such identifier (the server makes a
+new one each time), so a retry there could make a duplicate. Creating a purchase attempt does:
+the caller names it.
+
+### Where it appears in Ostensia
+`apps/web/lib/attempt-id.ts` makes the id (`crypto.randomUUID()`, checked against the API's
+identifier rule). `components/proposal-screen.tsx` makes it before it sends, keeps it with the
+exact request, and offers "Check status" (a read) and then, only if the attempt does not
+exist, "Try again" with the same id. On the server, `sameRequest` in
+`apps/api/src/gate/gate.ts` returns the existing attempt for the same id and the same cart, and
+refuses a different cart under that id (`attempt_id_reused`).
+
+### Why this design was selected
+It removes the question "did it work?" from the person: the page can read the attempt by its id
+and then resend only if it is not there. Nothing is resent automatically, because CLAUDE.md
+section 7 says a timeout is not a failure, and the page never decides on the person's behalf.
+
+### Alternative
+Let the server make the id and, after a lost answer, list everything and look for a match (what
+the mandate screen has to do, D-029). It works, but it guesses by comparing contents, and two
+genuinely identical requests cannot be told apart.
+
+### Failure case
+The same id is reused for a different cart. The gate refuses it (`attempt_id_reused`, 409) and
+the page says nothing was sent. A browser that cannot make a random id would throw before
+sending anything, rather than send an id the API would reject.
+
+### Evidence
+`lib/attempt-id.test.ts`; `lib/api-attempts.test.ts` ("sends the identical request, with the
+same attempt id, when the caller sends it again" and "sent once and never repeated by the
+client"); the browser run, scenarios S8 and S9 (a reply lost after the attempt was created:
+one POST, "Check status" found the one attempt; a request lost before it arrived: 404, then
+"Try again" with the same id, exactly one attempt).
+
+### Explain it to a judge
+(To be written by the developer.)
+
+### Questions I still cannot answer
+- (To be written by the developer.)
+
+## Topic: A label has to be true: the PayPal Sandbox badge only where PayPal was called
+
+### Plain-language explanation
+The interface tells the person where each piece of content came from. A label like "PayPal
+Sandbox" is a claim: it says a real PayPal operation happened. If it appears on something that
+never reached PayPal, the interface is saying something false, even though every word on the
+screen is individually correct. So the page decides the label from the record of what happened,
+not from the name of a status.
+
+### Where it appears in Ostensia
+`apps/web/lib/attempt-status.ts` (`reachedPayPal`, `paypalWasCalled`) decides whether PayPal was
+involved. `components/payment-panel.tsx` uses it: a panel with the PayPal treatment (a 3px rule
+and the badge) when a call was made; a plain panel saying "No order was sent to PayPal Sandbox."
+when the order never left; nothing but "Nothing was sent to PayPal." for a pre-check block.
+`GET /attempts/:id` returns the audit events that `paypalWasCalled` reads.
+
+### Why this design was selected
+The first browser run with an allowed cart showed why the status is not enough. With placeholder
+credentials the gate recorded the status `create_rejected`, which also covers a real rejection
+by PayPal. The audit log said `not_sent` with the detail `token_rejected`: the order was never
+sent. Showing the PayPal badge for that status would have claimed a PayPal operation that did
+not take place.
+
+### Alternative
+Choose the panel from the status alone, which is simpler and would have been wrong in exactly
+that case.
+
+### Failure case
+The events are missing (the page could not read them). `paypalWasCalled` then answers "yes" for a
+status that is past the gate's own checks, and "no" for one that never reached PayPal, so it
+errs towards showing less certainty about the pre-check statuses only.
+
+### Evidence
+`lib/attempt-status.test.ts` (a request that never left is not a call; a failed token is not a
+read; the statuses the gate reaches without PayPal); the browser run, scenario S7 (the plain
+Payment panel, 1px border, no badge, "Order not created"); the mutation checks that make a
+`not_sent` request count as a call, which the tests caught.
+
+### Explain it to a judge
+(To be written by the developer.)
+
+### Questions I still cannot answer
+- (To be written by the developer.)
+
+## Topic: A log is a record you describe, not one you tidy
+
+### Plain-language explanation
+The audit record turns each event the gate wrote into a sentence. It keeps the log's order, shows every event (an unknown kind is shown as unrecognised), and never decides anything. A PayPal badge goes only on an entry for a request that was sent.
+
+### Where it appears in Ostensia
+apps/web/lib/audit-record.ts (the wording table and buildAuditRecord), components/audit-record.tsx, guidelines section 13.4, and the drift test in apps/web/api-drift.test.ts.
+
+### Why this design was selected
+A record people use to check the gate must not hide, reorder or flatter what happened. One table, compared with the guidelines word for word, keeps the wording honest.
+
+### Alternative
+Show only the status and the explanation, as 7b did. That answers "what happened" but not "in what order, and what did PayPal say".
+
+### Failure case
+The gate adds an event type the page does not describe. The drift test fails, and until then the page shows "Unrecognised event" with its type.
+
+### Evidence
+apps/web/lib/audit-record.test.ts, apps/web/brand.test.ts (section 13), apps/web/api-drift.test.ts.
+
+### Explain it to a judge
+(For the developer to write in their own words.)
+
+### Questions I still cannot answer
+(For the developer.)
+
 ## Template for later entries
 
 ## Topic: [Concept]

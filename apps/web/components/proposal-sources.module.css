@@ -1,0 +1,47 @@
+.stack {
+  display: grid;
+  gap: var(--space-16);
+  min-width: 0;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-12);
+}
+
+.reason {
+  font-size: var(--text-13);
+  color: var(--ink-700);
+}
+
+.note {
+  font-size: var(--text-14);
+  color: var(--ink-700);
+}
+
+.choiceText {
+  display: grid;
+}
+
+.choiceName {
+  font-size: var(--text-16);
+}
+
+.choiceLine {
+  font-size: var(--text-13);
+  color: var(--ink-700);
+}
+
+.answer {
+  display: grid;
+  gap: var(--space-8);
+  font-size: var(--text-14);
+}
+
+.factLabel {
+  font-size: var(--text-13);
+  font-weight: 600;
+  color: var(--ink-700);
+}

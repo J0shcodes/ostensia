@@ -1,0 +1,69 @@
+.cart {
+  display: grid;
+  gap: var(--space-12);
+  min-width: 0;
+}
+
+.lines {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line-200);
+}
+
+.line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: baseline;
+  gap: var(--space-16);
+  padding: var(--space-12) 0;
+  border-bottom: 1px solid var(--line-200);
+  font-size: var(--text-14);
+}
+
+.what {
+  display: grid;
+  min-width: 0;
+}
+
+.name {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.variant {
+  color: var(--ink-700);
+  font-size: var(--text-13);
+}
+
+.priced,
+.amount {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.priced {
+  color: var(--ink-700);
+}
+
+.totalRow {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-16);
+  font-size: var(--text-16);
+  font-weight: 600;
+}
+
+.empty {
+  font-size: var(--text-14);
+  color: var(--ink-700);
+}
+
+/* Narrow screens: each line stacks, so nothing scrolls sideways. */
+@media (max-width: 639px) {
+  .line {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-4);
+  }
+}

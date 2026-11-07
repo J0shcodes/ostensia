@@ -547,7 +547,12 @@ and capture, written up like E2E_RESULTS.md.
 Estimated future size: S
 Proposed resolution: Record that run in Increment 8, or keep the demo stopping at the pre-check.
 Review trigger: Before recording the video.
-Status: Open
+Resolution: The developer ran an AI agent cart through authorization and capture in the sandbox
+on 2026-11-07 (docs/evidence/frontend/PROPOSAL_RESULT_WALKTHROUGH.md, section F): the pre-check
+and the final check allowed it, and an order id, an authorization id and a capture id were
+produced. The checklist is taken as the record; it was not written up like E2E_RESULTS.md. It
+is one run of a non-deterministic model (TD-025), and the video must not claim more than that.
+Status: Resolved (2026-11-07)
 
 ## Item TD-027 — The source of a proposal is not recorded in the audit log
 
@@ -595,6 +600,158 @@ Estimated future size: S
 Proposed resolution: Word the void as "authorization voided; nothing captured; release timing is
 PayPal's"; update if documentation is found.
 Review trigger: Documentation found, or a production plan.
+Status: Accepted for MVP
+
+## Item TD-030 — The web app has no automated component tests
+
+Date identified: 2026-11-06
+Related increment: Increment 7a
+Why it was deferred: Rendering components in a test needs React Testing Library and a DOM
+environment (jsdom or similar), which are new dependencies the developer did not approve
+(Increment 7 plan, decision 4). The logic is in plain modules under apps/web/lib and is tested.
+Current limitation: Nothing automated renders a component or clicks a button. The components
+are covered by the type checker, by scan tests (apps/web/web-boundaries.test.ts and
+brand.test.ts), by a production build, and by a browser run. The browser run in
+docs/evidence/frontend/MANDATE_WALKTHROUGH.md was a script kept outside the repository, so
+it cannot be repeated from a clone. Increment 7b added eleven more component files, and its
+78-check browser script is outside the repository in the same way.
+Impact if left unresolved: A change to a component can break behaviour that no test notices,
+for example focus handling, the unclear-confirmation flow or the draft panel.
+Required evidence or dependency: A decision to add a test renderer, or to add the browser
+script (and a browser dependency) to the repository.
+Estimated future size: M
+Proposed resolution: After the hackathon, either add a component test setup, or add the
+DevTools walkthrough as a script with its fault-injecting forwarder. Until then, repeat the
+walkthrough by hand after any change to apps/web/components.
+Review trigger: Any change to apps/web/components; Increment 7b.
+Status: Accepted for MVP
+
+## Item TD-031 — The proxy timeout is experimental and the AI latency it must cover is unmeasured
+
+Date identified: 2026-11-06
+Related increment: Increment 7a (D-027, D-029)
+Why it was deferred: AI latency was never measured (Report 00 L12), and the real draft route
+needs the developer's key.
+Current limitation: apps/web/next.config.ts sets experimental.proxyTimeout to 120000 ms because
+Next.js cuts a proxied request at 30 s by default and answers a plain-text 500 (observed:
+30.04 s). 120 s is a placeholder. The option is under `experimental`, so a Next.js upgrade may
+change it. A proxy cut-off does not cancel the request at the API. The page client stops
+waiting at 150 s. The API sets a 90 s timeout on its Anthropic client (apps/api/src/index.ts).
+(An earlier version of this item said the API set none; that was wrong.) Measured so far: one
+real draft took about 16 to 18 s (developer, 2026-11-06). One earlier attempt on a poor
+connection ended with the API's provider-timeout message, which the developer recalls at about
+30 s; that does not match the 90 s setting and is unexplained. The AI shopping agent's
+route (Increment 7b, POST /mandates/:id/agent-proposal) goes through the same proxy and the
+same 90 s provider timeout. The developer timed it once at about 3 to 5 s (2026-11-07, one
+sample; section F of the 7b walkthrough).
+Impact if left unresolved: A draft or agent call slower than 120 s is reported as unreachable
+although the API may still finish it. A Next.js upgrade could silently restore the 30 s limit.
+Required evidence or dependency: One timed real draft (checklist item B in
+docs/evidence/frontend/MANDATE_WALKTHROUGH.md), and later the agent route.
+Estimated future size: S
+Proposed resolution: Record the measured time; set the timeout from it; keep Next.js pinned and
+check this option on every upgrade (a scan test already requires a value above 30 s).
+Review trigger: The developer's timed draft, a Next.js upgrade, or Increment 7b's agent call.
+Status: Open
+
+## Item TD-032 — The first build of the web app needs internet access for its fonts
+
+Date identified: 2026-11-06
+Related increment: Increment 7a (D-029); Increment 8 (README)
+Why it was deferred: next/font/google is the approved mechanism (D-028, D2). Committing the
+font files (next/font/local) would add binaries and the SIL OFL text to the repository.
+Current limitation: Next.js downloads IBM Plex from Google when it builds. With the network
+reachable, three of four builds in the spike and the repository passed; one build failed once
+(its error text was not captured, so the cause is unknown). A rebuild with an existing .next
+folder works offline; a clean build with no network fails ("Failed to fetch IBM Plex Sans from
+Google Fonts"). The built app serves the fonts itself and the browser contacts no third party.
+Impact if left unresolved: A judge's or the developer's first `build` or `dev` can fail on a
+network problem, including on recording day.
+Required evidence or dependency: None to document; a decision to switch to local font files.
+Estimated future size: S
+Proposed resolution: The README says the first build needs internet and to build once before
+recording or submitting. If it proves unreliable, switch to next/font/local with committed
+woff2 files and their licence text.
+Review trigger: Increment 8 (README), or any build failure naming Google Fonts.
+Status: Accepted for MVP
+
+## Item TD-033 — The web app copies one limit from the API
+
+Date identified: 2026-11-06
+Related increment: Increment 7a
+Why it was deferred: The description limit is a constant in apps/api/src/routes/draft.ts
+(MAX_INSTRUCTION_LENGTH = 2000). The web app may not import from apps/api, and the domain
+does not hold it.
+Current limitation: apps/web/lib/messages.ts repeats 2000 for the counter and the field's
+maxLength. The server enforces its own limit and answers 400 invalid_request if the two ever
+differ, so nothing is unsafe. Every limit that lives in the domain is read from the domain's
+schema and not copied.
+Impact if left unresolved: If the API's limit changes, the counter shows the old number until
+someone updates it.
+Required evidence or dependency: None.
+Estimated future size: S
+Proposed resolution: Move the constant into the domain package, or expose it from the API,
+when either is next changed.
+Review trigger: Any change to the draft route's limit.
+Status: Accepted for MVP
+
+## Item TD-034 — Four attempt statuses have no way forward in the API
+
+Date identified: 2026-11-06
+Related increment: Increment 7b
+Why it was deferred: Fixing it means changing the gate or the routes, which 7b does not touch
+(the developer approved "no API change in 7b", decision A4).
+Current limitation: An attempt in create_unknown, anomaly, write_rejected or conflict cannot be
+settled again or reconciled (settle only acts on "authorized"; reconcile only on write_unknown,
+capture_pending and write_refused; apps/api/src/gate/gate.ts). The web page can only report
+the state and say that a person must look at PayPal's record.
+Impact if left unresolved: In the demo these end states cannot be resolved from the UI. An
+order may exist at PayPal Sandbox with no way for Ostensia to close it.
+Required evidence or dependency: A decision on whether the gate should reconcile an unknown
+order creation, and what a person is allowed to do about an anomaly.
+Estimated future size: M
+Proposed resolution: After the hackathon, design recovery for these states (read the order,
+then settle or abandon), with the same write-ahead and single-write rules as D-022.
+Review trigger: Any sandbox run that reaches one of these statuses, or a production plan.
+Status: Accepted for MVP
+
+## Item TD-035 — Three lists in the web app are copies of lists in the API
+
+Date identified: 2026-11-06
+Related increment: Increment 7b
+Why it was deferred: The web app may not import from apps/api, and the domain does not hold
+these lists (apps/web/web-boundaries.test.ts).
+Current limitation: apps/web/lib/api-types.ts repeats the six simulated scenarios
+(apps/api/src/simulation/scenarios.ts), the two shop modes (apps/api/src/ai/shopper-prompt.ts)
+and the 19 attempt statuses (apps/api/src/gate/state.ts). apps/web/api-drift.test.ts reads the
+API's source as text and fails if any of them changes there and not here, and
+apps/web/lib/attempt-status.ts must describe every status. Nothing is unsafe if they drift:
+the server still decides, and an unknown status is shown as "unexpected", not as understood.
+Impact if left unresolved: A new API status makes the page refuse to show that attempt until
+the copy and its wording are updated.
+Required evidence or dependency: None.
+Estimated future size: S
+Proposed resolution: Move the three lists into the domain package, or publish them from the
+API, when either is next changed.
+Review trigger: Any change to the gate's statuses, the scenarios or the shop modes.
+Status: Accepted for MVP
+
+## Item TD-036 — A mandate's revocation is not part of an attempt's audit record
+
+Date identified: 2026-11-07
+Related increment: Increment 7c
+Why it was deferred: mandate_revoked is an event of the mandate, not of an attempt, so
+GET /attempts/:id (gate.eventsFor) never returns it. Showing it needs an API change, which the
+7c plan excluded.
+Current limitation: after a revoke and a settle, the record shows the final check ("the
+mandate has been revoked") and the void, but not when the revocation happened.
+Impact if left unresolved: the demo cannot show the moment of revocation in the record; the
+result page's own notice says it.
+Required evidence or dependency: None.
+Estimated future size: S
+Proposed resolution: Have the attempt route also return the events of the attempt's mandate
+(mandate_created, mandate_revoked), and add them to the wording table.
+Review trigger: A request to show revocation in the record.
 Status: Accepted for MVP
 
 ## Template for later entries

@@ -9,7 +9,7 @@
   },
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc -p packages/domain && tsc -p apps/api"
+    "typecheck": "tsc -p packages/domain && tsc -p apps/api && pnpm --filter @ostensia/web typecheck"
   },
   "devDependencies": {
     "typescript": "6.0.3",

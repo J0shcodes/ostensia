@@ -2,17 +2,20 @@
 
 Compact status note. Read this first at the start of every session.
 
-Last updated: 2026-11-05
+Last updated: 2026-11-07
 
 ## Status
 
-- **Current increment:** Increment 6b - the AI shopping agent (D-025). The agent
-  turns a task into a cart; code prices it from the catalogue; the client sends the
-  proposal to POST /attempts, where the gate decides. Implemented and verified
-  against a fake client and a real node process on branch feat/ai-drafting (6a is
-  committed there: b717727, 74cfb9d, not yet pushed or merged); the developer's
-  `agent-smoke` run against the real model passed (2026-11-05); awaiting the
-  developer's confirmation and commit authorization.
+- **Current increment:** Increment 7c - the audit record and the list of attempts (D-031
+  Accepted; guidelines version 1.3, section 13). Implemented and verified on branch
+  feat/frontend (not committed); the developer's sandbox check passed; awaiting comprehension
+  confirmation and commit authorization. Before it: Increment 7b - the web app's proposal and result screens (D-030
+  Accepted; brand guidelines version 1.1, section 12). Implemented and verified on branch
+  feat/frontend (not committed). The developer's sandbox walkthrough is done
+  (docs/evidence/frontend/PROPOSAL_RESULT_WALKTHROUGH.md, Part 2); awaiting the comprehension
+  confirmation and commit authorization.
+  Increment 7a is complete (committed in 1230b97 and f1bf31a; D-029 Accepted). The audit
+  view is Increment 7c and needs its own proposal.
 - **Passed:**
   - Repository audit (2026-10-29).
   - Directory rename, MIT license and decisions D-001 to D-005,
@@ -75,10 +78,40 @@ Last updated: 2026-11-05
     the provider (503 auth); the key appeared in no log; nothing was written to the
     audit log. That placeholder-key request sent one fictional sentence to the
     provider and nothing else. The real model has not been run as a shopper.
+  - Increment 7a checks (2026-11-06): pnpm test passes (56 files, 1686 tests; 267
+    new in apps/web), pnpm typecheck passes for the domain, the API and the web app,
+    pnpm audit on the repository lockfile found no known vulnerabilities, and 41 of
+    41 deliberate mutations of the new logic and scan tests were caught. `next build`
+    passes. The real API (placeholder values, no AI key, no PayPal call) was driven
+    through the Next.js rewrite by a headless Chrome script: 96 of 96 checks passed,
+    including the manual path with no AI key, the AI-off notice, validation, both ways
+    a confirmation can fail to come back (the page did not retry; exactly one mandate
+    was created), the API being down, four viewport widths, tab order and fonts. A
+    40 s response completed through the rewrite (Next.js's default would cut at 30 s).
+    A first run found four defects, fixed. The developer then ran the walkthrough
+    (2026-11-06): no problems found; one real AI draft took about 16 to 18 s.
+  - Increment 7b checks (2026-11-06): pnpm test passes (64 files, 1825 tests; 139 new
+    in apps/web), pnpm typecheck passes, 40 of 40 deliberate mutations were caught, no
+    dependency was added, and nothing in apps/api or packages/domain changed. `next
+    build` passes. The real API (placeholder values, no AI key) was driven through the
+    rewrite by a headless Chrome script: 78 of 78 checks passed, including a blocked cart,
+    "check and settle", an allowed cart that reached the order step with placeholder
+    credentials (status "Order not created", no false success), both ways an answer can
+    fail to come back (no automatic resend; exactly one attempt each time), a revoked
+    mandate, unknown ids, four viewport widths. One real defect found and fixed (a route id
+    encoded twice). That run sent one token request with a fictional client id and secret
+    to PayPal's sandbox token endpoint, which refused it; no order was created. The
+    developer then ran the sandbox walkthrough (2026-11-07, real PayPal Sandbox and
+    Anthropic key): two-step and one-step capture, revoke then settle ending in "Voided",
+    one live attempt per mandate, blocked carts, the AI agent's cart (3 to 5 s) and an
+    agent cart through authorization and capture (TD-026 resolved), and "Check status"
+    after an API restart all worked. Not exercised anywhere: "Check PayPal's record"
+    (reconcile) and the notice for a request that went nowhere while funds are on hold.
 - **Broken:** The spike runner (docs/evidence/spike/scripts/run-spike.js)
   points to countersign-spike.* files and a SPIKE_README.md that do not
   exist (TD-001). The application does not use it.
-- **Not yet existing (expected):** AI integration, the frontend. The PayPal adapter, the gate, the routes and the
+- **Not yet existing (expected):** the audit timeline and the list of all attempts
+  (Increment 7c). The PayPal adapter, the gate, the routes and the
   simulated agent exist and are wired into the server (AUDIT_LOG_PATH, default
   data/audit.jsonl under apps/api/, gitignored); the e2e run wrote its own
   gitignored data/e2e-*.jsonl; the server has not been started with real
@@ -125,9 +158,9 @@ Last updated: 2026-11-05
   both; the hidden instruction was not obeyed; about 1 cent a call. One sample of
   a non-deterministic model (TD-025). Evidence:
   docs/evidence/ai-drafting/AGENT_SMOKE_RESULTS.md.
-- **Next approved task:** None. Increment 7 (the UI) and Increment 8 (demo
+- **Next approved task:** None. Increment 7c (the audit view) and Increment 8 (demo
   hardening) each need their own proposal and approval.
-- **Next comprehension gate:** Increment 6b walkthrough.
+- **Next comprehension gate:** Increment 7c comprehension questions.
 
 ## Evidence gates
 
@@ -171,7 +204,9 @@ Each increment needs separate approval.
 | 5b | Routes, synthetic catalogue, simulated-agent scenarios, end-to-end sandbox run | Complete (797652d, 6693e8a; merged in 959f1b4); the developer's `e2e` sandbox run passed every step |
 | 6a | AI mandate drafting: draft route, completeness check, warnings (Claude, D-024) | Complete (b717727, 74cfb9d); the developer's two `draft-smoke` runs against the real model passed |
 | 6b | A labelled AI shopping agent that proposes carts, checked by the same deterministic gate (D-025) | Implemented; the developer's `agent-smoke` run against the real model passed; awaiting commit |
-| 7 | Next.js frontend | Not started |
+| 7a | Next.js app: the /api rewrite (D-027) and the mandate screen (D-026 to D-029) | Complete (1230b97, f1bf31a); the developer's walkthrough is done and D-029 is Accepted; on feat/frontend, not pushed |
+| 7b | Frontend: proposal and result screens (D-030; guidelines section 12) | Implemented and verified (a browser run against the real API, then the developer's sandbox walkthrough); D-030 Accepted; uncommitted on feat/frontend; awaiting commit authorization |
+| 7c | Frontend: the audit record and the list of attempts (D-031; guidelines section 13) | Implemented and verified by tests, a browser run on placeholder values and the developer's sandbox check (capture, void and list all passed, as reported by the developer); uncommitted |
 | 8 | Demo hardening and publication review | Not started |
 
 ## Earlier generated code
