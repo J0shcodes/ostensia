@@ -15,6 +15,7 @@ import {
   withoutMark,
 } from "../lib/mandate-form.ts";
 import type { ItemFieldName, ItemForm, MandateFormState, ValidationResult } from "../lib/mandate-form.ts";
+import { PLACEHOLDERS } from "../lib/messages.ts";
 import { Callout } from "./callout.tsx";
 import { Button, MoneyInput, TextArea, TextInput } from "./controls.tsx";
 import { ErrorSummary } from "./error-summary.tsx";
@@ -151,6 +152,7 @@ export function MandateForm({
               id={id}
               rows={2}
               value={form.intentSummary}
+              placeholder={PLACEHOLDERS.intentSummary}
               invalid={invalid}
               onChange={(event) => patch({ intentSummary: event.target.value }, [FIELD_INTENT])}
               {...(describedBy === undefined ? {} : { "aria-describedby": describedBy })}
@@ -173,6 +175,7 @@ export function MandateForm({
             <MoneyInput
               id={id}
               value={form.maxTotal}
+              placeholder={PLACEHOLDERS.maxTotal}
               invalid={invalid}
               onChange={(event) => patch({ maxTotal: event.target.value }, [FIELD_TOTAL])}
               {...(describedBy === undefined ? {} : { "aria-describedby": describedBy })}

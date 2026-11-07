@@ -4,6 +4,7 @@ import { formatUsd } from "@ostensia/domain";
 import type { CatalogueProduct } from "../lib/api-types.ts";
 import { domId, itemField } from "../lib/mandate-form.ts";
 import type { ItemFieldName, ItemForm } from "../lib/mandate-form.ts";
+import { PLACEHOLDERS } from "../lib/messages.ts";
 import { Button, Choice, MoneyInput, SelectInput, TextInput } from "./controls.tsx";
 import { Field, FieldGroup } from "./field.tsx";
 import { ProvenanceBadge } from "./provenance.tsx";
@@ -135,6 +136,7 @@ export function ItemEditor({ item, index, products, catalogueReady, fromDraft, e
               inputMode="numeric"
               autoComplete="off"
               value={item.maxQuantity}
+              placeholder={PLACEHOLDERS.maxQuantity}
               invalid={invalid}
               onChange={(event) => onChange({ ...item, maxQuantity: event.target.value }, ["quantity"])}
               {...(describedBy === undefined ? {} : { "aria-describedby": describedBy })}
@@ -153,6 +155,7 @@ export function ItemEditor({ item, index, products, catalogueReady, fromDraft, e
             <MoneyInput
               id={id}
               value={item.maxUnitPrice}
+              placeholder={PLACEHOLDERS.maxUnitPrice}
               invalid={invalid}
               onChange={(event) => onChange({ ...item, maxUnitPrice: event.target.value }, ["unitPrice"])}
               {...(describedBy === undefined ? {} : { "aria-describedby": describedBy })}

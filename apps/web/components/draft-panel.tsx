@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { DraftResponse } from "../lib/api-types.ts";
-import { AI_DRAFT_NOTE, AI_OFF_NOTICE, MAX_INSTRUCTION_LENGTH, describeMissingField, humanizeDraftText } from "../lib/messages.ts";
+import { AI_DRAFT_NOTE, AI_OFF_NOTICE, MAX_INSTRUCTION_LENGTH, PLACEHOLDERS, describeMissingField, humanizeDraftText } from "../lib/messages.ts";
 import { Callout } from "./callout.tsx";
 import { Button, TextArea } from "./controls.tsx";
 import { Field } from "./field.tsx";
@@ -99,6 +99,7 @@ export function DraftPanel({ instruction, onInstructionChange, state, aiOff, onD
                 id={id}
                 rows={5}
                 value={instruction}
+                placeholder={PLACEHOLDERS.instruction}
                 maxLength={MAX_INSTRUCTION_LENGTH}
                 onChange={(event) => onInstructionChange(event.target.value)}
                 {...(describedBy === undefined ? {} : { "aria-describedby": describedBy })}

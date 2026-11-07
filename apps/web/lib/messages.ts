@@ -21,6 +21,19 @@ export const REFERENCE_NOTE =
 // it; this only sets the counter and the field's maxLength.
 export const MAX_INSTRUCTION_LENGTH = 2000;
 
+// Placeholders: an example of a valid value, shown only while a field is empty (guidelines
+// sections 6 and 10, a test compares each with the document). They are never a default and
+// never the only instruction: every field keeps its label. Text fields start "Example:",
+// number fields "e.g.". The expiry has none, because a date-time control cannot show one.
+export const PLACEHOLDERS = {
+  instruction: "Example: Buy up to two matte sticker packs, with a maximum total of $5.",
+  agentTask: "Example: A small gift for a colleague, under $20.",
+  intentSummary: "Example: Two matte sticker packs for my laptop.",
+  maxTotal: "e.g. 5.00",
+  maxQuantity: "e.g. 2",
+  maxUnitPrice: "e.g. 1.50",
+} as const;
+
 export type Failure = { readonly tone: "off" | "error"; readonly text: string };
 
 const SAFE_CODE = /^[a-z][a-z0-9_]{0,40}$/;

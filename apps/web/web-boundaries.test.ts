@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { PLACEHOLDERS } from "./lib/messages.ts";
 
 // Structural rules for the web app, checked by reading its source, in the same way the
 // API's boundary tests do. They turn D-027 (the browser reaches the API only through the
@@ -218,6 +219,25 @@ describe("safe rendering and honest interface (CLAUDE.md sections 7 and 8)", () 
       expect(existsSync(path), name).toBe(true);
       expect(code(path), name).not.toMatch(/paypal/i);
     }
+  });
+
+  it("takes every placeholder from the approved list, never from a string written in a component", () => {
+    for (const path of CLIENT.filter((file) => file.endsWith(".tsx"))) {
+      const text = code(path);
+      expect(text, rel(path)).not.toMatch(/placeholder\s*=\s*["'`]/);
+      for (const match of text.matchAll(/placeholder\s*=\s*\{([^}]*)\}/g)) {
+        expect(match[1]?.trim(), rel(path)).toMatch(/^PLACEHOLDERS\.[a-zA-Z]+$/);
+      }
+    }
+    // If the scan stops finding the fields it was written for, it is not checking.
+    const using = CLIENT.filter((file) => /placeholder\s*=\s*\{PLACEHOLDERS\./.test(code(file))).map(rel);
+    expect(using.sort()).toEqual(["components/draft-panel.tsx", "components/item-editor.tsx", "components/mandate-form.tsx", "components/proposal-sources.tsx"]);
+    // Every approved placeholder is used by a field, and no field uses one that is not approved.
+    const used = new Set<string>();
+    for (const path of CLIENT) {
+      for (const match of code(path).matchAll(/placeholder\s*=\s*\{PLACEHOLDERS\.([a-zA-Z]+)\}/g)) used.add(match[1] ?? "");
+    }
+    expect([...used].sort()).toEqual(Object.keys(PLACEHOLDERS).sort());
   });
 
   it("stores nothing in the browser", () => {

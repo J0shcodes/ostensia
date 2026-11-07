@@ -104,6 +104,15 @@
   font-size: var(--text-16);
 }
 
+/* A placeholder is an example, not a value: ink-500 (4.5:1 on white), fully opaque so the
+   colour is exactly the token in every browser. Guidelines section 6. */
+.input::placeholder,
+.textarea::placeholder,
+.money input::placeholder {
+  color: var(--ink-500);
+  opacity: 1;
+}
+
 .textarea {
   min-height: 96px;
   padding: var(--space-8) var(--space-12);

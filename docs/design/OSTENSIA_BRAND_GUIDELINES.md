@@ -3,7 +3,8 @@
 Status: Approved (2026-11-06, by the developer). Section 12 (proposal and result screens,
 Increment 7b) and its four proposed conventions (12.7) were approved by the developer on
 2026-11-06.
-Version: 1.1
+Version: 1.2 (1.1 added section 12; 1.2 added field placeholders, approved by the developer on
+2026-11-07)
 Scope: the visual identity and interface language of the Ostensia frontend (apps/web).
 Decision record: D-028 (docs/DECISIONS.md)
 Required reading: CLAUDE.md section 14 requires reading this document before making or
@@ -148,6 +149,10 @@ PayPal brand blue is not used. Ostensia's colours stay distinct from PayPal's.
     aria-describedby; aria-invalid set.
   - Money fields: "$" prefix, "USD" suffix, inputmode="decimal".
   - Required fields are marked "Required" in text, not by an asterisk alone.
+  - Placeholders: where a field takes free text or a number, an example of a valid value
+    (the strings are in section 10), in ink-500 at full opacity (4.5:1 on white). It shows
+    only while the field is empty, is never a default, and never replaces the label or the
+    help text. The expiry has none, because a date-time control cannot show one.
 - **Cards:** white, 1px line-300, 8px radius, 24px padding, the card shadow.
   The header row holds a title (20/600) and, where content has a source, a
   provenance badge on the right.
@@ -269,6 +274,15 @@ Approved disclosures and strings:
   traceability. It is not proof of who approved the mandate, of their consent, or
   of any authorization." Do not say or imply that the reference has been attached
   to a PayPal order.
+- Field placeholders (examples of valid values, added 2026-11-07 at the developer's
+  request; text fields begin "Example:", number fields "e.g."):
+  - AI description: "Example: Buy up to two matte sticker packs, with a maximum total of
+    $5."
+  - AI agent task: "Example: A small gift for a colleague, under $20."
+  - What this is for: "Example: Two matte sticker packs for my laptop."
+  - Maximum total: "e.g. 5.00"
+  - Maximum quantity: "e.g. 2"
+  - Maximum unit price: "e.g. 1.50"
 - Holds, captures and voids (later increments): "PayPal authorized the payment: the
   buyer's funds are on hold; no money has moved." / "Payment captured in PayPal
   Sandbox." / "Authorization voided in PayPal Sandbox; nothing was captured. When

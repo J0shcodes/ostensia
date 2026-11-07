@@ -2292,6 +2292,14 @@ approved D-030 on 2026-11-07.
 Done: the developer's sandbox walkthrough (Part 2 of the evidence file); TD-026 is resolved by
 its agent run. Increment 7c (the audit timeline and the list of attempts) needs its own
 proposal.
+After acceptance, at the developer's request (2026-11-07): example placeholders were added to
+the AI description, the AI agent's task, and the mandate form's summary, total, quantity and
+unit price (guidelines version 1.2, sections 6 and 10). They are examples of valid values, in
+ink-500, never defaults; the expiry has none. The AI description's placeholder was the
+developer's own wording. This was not part of D-030's plan. In the same change, the unit-price
+field no longer sits lower than the quantity field beside it when its label wraps (a layout
+flaw from 7a): the two fields now share rows (CSS subgrid), checked at 1280, 1024, 768 and 640px
+with and without help and error text.
 
 ## Template for later entries
 

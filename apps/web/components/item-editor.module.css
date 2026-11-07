@@ -26,9 +26,21 @@
   gap: var(--space-16);
 }
 
+/* Side by side from 640px. The two fields share four rows (label, control, help, error), so
+   their controls line up even when one label wraps onto a second line, and when only one
+   field shows help or an error. Each field keeps its own 4px spacing between rows. */
 @media (min-width: 640px) {
   .pair {
     grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto auto auto;
+    row-gap: 0;
+  }
+
+  .pair > div {
+    display: grid;
+    grid-row: span 4;
+    grid-template-rows: subgrid;
+    row-gap: var(--space-4);
   }
 }
 

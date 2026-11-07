@@ -21,6 +21,7 @@ import {
   LABELS,
   NOT_SENT_TO_PAYPAL,
   PAGE_INTRO,
+  PLACEHOLDERS,
   PROPOSAL_INTRO,
   PROPOSAL_TITLE,
   REFERENCE_NOTE,
@@ -259,7 +260,7 @@ describe("proposal and result screens (guidelines section 12)", () => {
   const section12 = document.slice(document.indexOf("## 12. Proposal and result screens"));
 
   it("is part of the approved specification", () => {
-    expect(GUIDELINES).toContain("Version: 1.1");
+    expect(GUIDELINES).toMatch(/^Version: 1\.[1-9]/m);
     expect(document).toContain("were approved by the developer on 2026-11-06");
     expect(GUIDELINES).not.toContain("PROPOSED");
     expect(section12.length).toBeGreaterThan(1000);
@@ -360,5 +361,23 @@ describe("section 12 styles that only appear after a PayPal call or an irreversi
 
   it("stacks the cart below 640px so nothing scrolls sideways (12.7)", () => {
     expect(css("cart-view.module.css")).toMatch(/@media \(max-width: 639px\)\s*\{\s*\.line\s*\{\s*grid-template-columns:\s*minmax\(0, 1fr\);/);
+  });
+});
+
+describe("field placeholders (guidelines sections 6 and 10)", () => {
+  const flat = (text: string): string => text.replace(/\s+/g, " ");
+  const document = flat(GUIDELINES);
+
+  it.each(Object.entries(PLACEHOLDERS))("the %s placeholder matches the guidelines word for word", (_name, text) => {
+    expect(document).toContain(`"${text}"`);
+  });
+
+  it("draws a placeholder in ink-500 at full opacity, in every text control", () => {
+    const controls = readFileSync(join(WEB, "components", "controls.module.css"), "utf8");
+    expect(controls).toMatch(/\.input::placeholder,\s*\.textarea::placeholder,\s*\.money input::placeholder\s*\{[^}]*color:\s*var\(--ink-500\);[^}]*opacity:\s*1;/);
+  });
+
+  it("states that a placeholder is never a default and never replaces the label", () => {
+    expect(document).toContain("It shows only while the field is empty, is never a default, and never replaces the label or the help text.");
   });
 });

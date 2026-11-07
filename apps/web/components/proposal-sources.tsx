@@ -11,6 +11,7 @@ import {
   BUSY,
   LABELS,
   MAX_INSTRUCTION_LENGTH,
+  PLACEHOLDERS,
   SCENARIO_TEXT,
 } from "../lib/messages.ts";
 import { Callout } from "./callout.tsx";
@@ -126,6 +127,7 @@ export function AgentPanel({ mode, onMode, task, onTask, state, off, disabledRea
               id={id}
               rows={3}
               value={task}
+              placeholder={PLACEHOLDERS.agentTask}
               maxLength={MAX_INSTRUCTION_LENGTH}
               onChange={(event) => onTask(event.target.value)}
               {...(describedBy === undefined ? {} : { "aria-describedby": describedBy })}
